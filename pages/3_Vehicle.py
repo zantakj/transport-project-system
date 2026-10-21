@@ -2,37 +2,30 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Vehicle", page_icon="🚚", layout="wide")
+st.set_page_config(page_title="Vehicle", layout="wide")
 st.title("🚚 3. Vehicle - หน้าดูข้อมูลเกี่ยวกับรถ")
 
-if not st.session_state.get("logged_in", False):
-    st.warning("กรุณา Login ที่หน้าหลักก่อนใช้งาน")
-    st.stop()
-
-conn = sqlite3.connect("transport.db")
+conn = sqlite3.connect('transport.db')
 try:
-    df = pd.read_sql_query("SELECT * FROM shipments", conn)
+    df = pd.read_sql("SELECT * FROM shipments", conn)
 except Exception:
     df = pd.DataFrame()
 conn.close()
 
-if df.empty:
-    st.info("ยังไม่มีข้อมูลในระบบ")
-else:
+if not df.empty and 'Vehicle_Code' in df.columns:
     st.subheader("📋 สรุปข้อมูลการใช้งานรถแต่ละคัน")
+    
+    # รวมกลุ่มตามรหัสรถ และประเภทรถ
+    v_summary = df.groupby(['Vehicle_Code', 'Vehicle_Type']).agg(
+        จำนวนเที่ยววิ่ง=('Trip_ID', 'count'),
+        ระยะทางรวม_กม=('Distance_km', 'sum'),
+        น้ำมันที่ใช้_ลิตร=('Fuel_Liters', 'sum'),
+        ค่าน้ำมันรวม_บาท=('Fuel_Cost_THB', 'sum')
+    ).reset_index()
 
-    # Groupby สรุปข้อมูลตามทะเบียนรถ
-    vehicle_summary = (
-        df.groupby(["plate_no", "vehicle_type"])
-        .agg(
-            จำนวนเที่ยววิ่ง=("id", "count"),
-            ระยะทางรวม_กม=("distance", "sum"),
-        )
-        .reset_index()
-    )
+    # คำนวณ อัตราสิ้นเปลือง (km/L)
+    v_summary['อัตราสิ้นเปลือง (กม./ลิตร)'] = (v_summary['ระยะทางรวม_กม'] / v_summary['น้ำมันที่ใช้_ลิตร']).round(2)
 
-    st.dataframe(vehicle_summary, use_container_width=True)
-
-    st.divider()
-    st.subheader("📊 เปรียบเทียบระยะทางวิ่งของรถแต่ละคัน")
-    st.bar_chart(vehicle_summary.set_index("plate_no")["ระยะทางรวม_กม"])
+    st.dataframe(v_summary, use_container_width=True, hide_index=True)
+else:
+    st.info("💡 ไม่พบข้อมูลรถในระบบ")
