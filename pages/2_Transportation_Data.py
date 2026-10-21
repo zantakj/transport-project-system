@@ -1,3 +1,9 @@
+import streamlit as st
+
+# ตรวจสอบสิทธิ์การเข้าถึง
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
+    st.stop()
 import sqlite3
 import pandas as pd
 import streamlit as st
