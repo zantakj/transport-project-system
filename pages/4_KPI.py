@@ -9,18 +9,17 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
     st.stop()
 
-st.set_page_config(page_title="KPI & Real-Time Fuel Cost", page_icon="⛽", layout="wide")
+st.set_page_config(page_title="KPI & Cost Analytics", page_icon="⛽", layout="wide")
 
-st.title("🎯 4. KPI & Real-Time Fuel Cost Analytics")
-st.caption("ระบบดึงราคาน้ำมัน Real-Time อัปเดตอัตโนมัติตามวันปัจจุบัน และคำนวณต้นทุน/กำไรสุทธิ")
+st.title("🎯 4. KPI & Cost Analytics")
+st.caption("ระบบคำนวณต้นทุนการขนส่งเปรียบเทียบราคาน้ำมัน Real-Time และกำหนดค่าเสื่อมสภาพได้ตามต้องการ")
 
 # ------------------------------------
-# 🌐 1. ฟังก์ชันดึงราคาน้ำมัน Real-Time ณ วันปัจจุบัน
+# 🌐 1. ฟังก์ชันดึงราคาน้ำมัน Real-Time
 # ------------------------------------
-@st.cache_data(ttl=1800)  # ดึงราคาใหม่ทุก 30 นาที (อัปเดตอัตโนมัติตลอดในอนาคต)
+@st.cache_data(ttl=1800)  # ดึงราคาใหม่ทุก 30 นาที
 def fetch_today_diesel_price():
     try:
-        # เชื่อมต่อ API ราคาน้ำมันขายปลีกในไทย
         res = requests.get("https://oil-price.bangchak.co.th/api/oilprice", timeout=4)
         if res.status_code == 200:
             data = res.json()
@@ -50,18 +49,18 @@ if not df.empty:
     # ------------------------------------
     # ⚙️ 2. SIDEBAR CONFIGURATION
     # ------------------------------------
-    st.sidebar.markdown("### ⛽ ตัวเลือกระบบคำนวณราคาน้ำมัน")
+    st.sidebar.markdown("### ⛽ เลือกโหมดคิดราคาน้ำมัน")
     
     price_mode = st.sidebar.radio(
-        "โหมดการคิดราคาน้ำมัน:",
+        "ตัวเลือกราคาน้ำมัน:",
         [
-            "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้ (อัปเดตอัตโนมัติ)", 
+            "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้", 
             "สูตรเกณฑ์องค์กร (3.98 บ./กม. @ น้ำมัน 40 บ.)", 
             "ตามค่าน้ำมันเดิมที่บันทึกในเอกสาร"
         ]
     )
 
-    if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้ (อัปเดตอัตโนมัติ)":
+    if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้":
         active_fuel_price = st.sidebar.number_input("ราคาน้ำมันดีเซลวันนี้ (บาท/ลิตร):", value=today_diesel_price, step=0.10)
         st.sidebar.caption(price_status)
     elif price_mode == "สูตรเกณฑ์องค์กร (3.98 บ./กม. @ น้ำมัน 40 บ.)":
@@ -69,23 +68,32 @@ if not df.empty:
         st.sidebar.info("💡 คำนวณตามเกณฑ์ 3.98 บาท/กม.")
     else:
         active_fuel_price = None
-        st.sidebar.info("💡 ใช้ข้อมูลค่าน้ำมันเดิมในระบบ")
+        st.sidebar.info("💡 ใช้ข้อมูลค่าน้ำมันเดิมในตารางเอกสาร")
 
     st.sidebar.divider()
-    st.sidebar.markdown("### 🛠️ ค่าเสื่อมสภาพยานพาหนะ")
-    apply_dep = st.sidebar.checkbox("รวมค่าเสื่อมสภาพ (1,900 บาท/เที่ยว)", value=True)
-    dep_per_trip = 1900.0 if apply_dep else 0.0
+    st.sidebar.markdown("### 🛠️ ปรับค่าเสื่อมสภาพยานพาหนะ")
+    
+    # สวิตช์เปิด-ปิด และช่องระบุค่าเสื่อมสภาพต่อเที่ยว
+    apply_dep = st.sidebar.checkbox("คำนวณรวมค่าเสื่อมสภาพ", value=True)
+    
+    if apply_dep:
+        dep_per_trip = st.sidebar.number_input(
+            "ค่าเสื่อมสภาพต่อเที่ยว (บาท/เที่ยว):", 
+            value=1900.0, 
+            step=100.0,
+            help="สามารถปรับเปลี่ยนค่าเสื่อมสภาพเหมาจ่ายต่อเที่ยวได้ตามต้องการ"
+        )
+    else:
+        dep_per_trip = 0.0
 
     # ------------------------------------
-    # 📊 3. คำนวณต้นทุนตามโหมดที่เลือก
+    # 📊 3. คำนวณต้นทุน REAL-TIME & DEPRECIATION
     # ------------------------------------
     calc_df = df.copy()
 
-    if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้ (อัปเดตอัตโนมัติ)":
-        # ค่าน้ำมัน = น้ำมันที่ใช้ (ลิตร) x ราคาน้ำมัน Real-Time วันนี้
+    if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้":
         calc_df['Calculated_Fuel_Cost'] = calc_df['Fuel_Liters'] * active_fuel_price
     elif price_mode == "สูตรเกณฑ์องค์กร (3.98 บ./กม. @ น้ำมัน 40 บ.)":
-        # ค่าน้ำมัน = ระยะทาง (กม.) x 3.98
         calc_df['Calculated_Fuel_Cost'] = calc_df['Distance_km'] * 3.98
     else:
         calc_df['Calculated_Fuel_Cost'] = calc_df['Fuel_Cost_THB']
@@ -109,7 +117,7 @@ if not df.empty:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("💵 รายได้รวม", f"฿{total_revenue:,.2f}")
     
-    if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้ (อัปเดตอัตโนมัติ)":
+    if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้":
         m2.metric("⛽ ค่าน้ำมันรวม (Real-Time)", f"฿{total_calculated_fuel_cost:,.2f}", delta=f"@{active_fuel_price:.2f} บ./ลิตร")
     elif price_mode == "สูตรเกณฑ์องค์กร (3.98 บ./กม. @ น้ำมัน 40 บ.)":
         m2.metric("⛽ ค่าน้ำมันรวม (เกณฑ์องค์กร)", f"฿{total_calculated_fuel_cost:,.2f}", delta="3.98 บ./กม.")
@@ -124,7 +132,7 @@ if not df.empty:
     # ------------------------------------
     # 📋 5. DISPLAY TABLE
     # ------------------------------------
-    st.markdown("#### 📋 รายละเอียดคำนวณรายเที่ยววิ่ง (อัปเดตตามราคาน้ำมันวันนี้)")
+    st.markdown("#### 📋 ตารางคำนวณรายเที่ยววิ่ง (ปรับเปลี่ยนค่าน้ำมันและค่าเสื่อมได้)")
     
     display_table = calc_df[['Trip_ID', 'Vehicle_Type', 'Distance_km', 'Fuel_Liters', 'Revenue_THB', 'Calculated_Fuel_Cost', 'Depreciation_Cost', 'Calculated_Profit']].copy()
     display_table.columns = ['รหัสเที่ยว', 'ประเภทรถ', 'ระยะทาง (กม.)', 'น้ำมัน (ลิตร)', 'รายได้ (บาท)', 'ค่าน้ำมันคำนวณ (บาท)', 'ค่าเสื่อมสภาพ (บาท)', 'กำไรสุทธิคำนวณ (บาท)']
@@ -132,4 +140,4 @@ if not df.empty:
     st.dataframe(display_table, use_container_width=True, hide_index=True)
 
 else:
-    st.info("💡 ระบบได้ทำการรีเซ็ตข้อมูลแล้ว กรุณาไปที่หน้า Import Data เพื่อนำเข้าไฟล์ Excel ใหม่ครับ")
+    st.info("💡 ไม่พบข้อมูลในระบบ หรือข้อมูลถูกรีเซ็ตเรียบร้อยแล้ว กรุณาไปที่หน้า Import Data เพื่ออัปโหลดไฟล์ Excel ใหม่ครับ")
