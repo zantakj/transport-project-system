@@ -1,39 +1,24 @@
 import streamlit as st
 
-st.set_page_config(
-    page_title="ระบบบริหารจัดการการขนส่ง", page_icon="🚚", layout="wide"
-)
-
-# ระบบ Login
+# ตรวจสอบสถานะการเข้าสู่ระบบ
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-    st.session_state["role"] = None
+    st.session_state.logged_in = False
 
-if not st.session_state["logged_in"]:
-    st.title("🔐 Login - เข้าสู่ระบบ")
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+if not st.session_state.logged_in:
+    st.title("🔒 เข้าสู่ระบบก่อนใช้งาน")
+    username = st.text_input("ชื่อผู้ใช้งาน")
+    password = st.text_input("รหัสผ่าน", type="password")
+    
+    if st.button("เข้าสู่ระบบ"):
+        # ตั้งค่ารหัสผ่านสมมติสำหรับทดสอบ
+        if username == "admin" and password == "1234":
+            st.session_state.logged_in = True
+            st.success("เข้าสู่ระบบสำเร็จ!")
+            st.rerun()
+        else:
+            st.error("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
+    
+    # ซ่อนส่วนที่เหลือหากยังไม่ Login
+    st.stop()
 
-        if st.button("เข้าสู่ระบบ", type="primary"):
-            if username == "admin" and password == "1234":
-                st.session_state["logged_in"] = True
-                st.session_state["role"] = "Admin"
-                st.success("เข้าสู่ระบบสำเร็จ!")
-                st.rerun()
-            elif username == "user" and password == "1234":
-                st.session_state["logged_in"] = True
-                st.session_state["role"] = "User"
-                st.success("เข้าสู่ระบบสำเร็จ!")
-                st.rerun()
-            else:
-                st.error("Username หรือ Password ไม่ถูกต้อง")
-else:
-    st.sidebar.write(f"👤 ผู้ใช้งาน: **{st.session_state['role']}**")
-    if st.sidebar.button("ออกจากระบบ"):
-        st.session_state["logged_in"] = False
-        st.rerun()
-
-    st.title("🚚 ระบบบริหารจัดการการขนส่ง (Transportation Management System)")
-    st.info("👈 กรุณาเลือกเมนูการใช้งานจากแถบด้านข้าง (Sidebar)")
+st.success("ยินดีต้อนรับเข้าสู่ระบบจัดการขนส่ง")
