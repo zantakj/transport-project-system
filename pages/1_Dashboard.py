@@ -1,28 +1,24 @@
-import streamlit as st
-
-# ตรวจสอบสิทธิ์การเข้าถึง
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
-    st.stop()
 import sqlite3
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
+# 🚨 ตรวจสอบสิทธิ์การเข้าถึง
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
+    st.stop()
+
 # 1. ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="Transportation Dashboard", page_icon="📊", layout="wide")
 
-# 2. ตกแต่งด้วย CSS สไตล์ Dark Mode สบายตา (SaaS Card Style)
+# 2. ตกแต่งด้วย CSS สไตล์ Dark Mode สบายตา
 st.markdown("""
 <style>
-    /* พื้นหลังหลักของแอป - สีกรมท่าเข้ม สบายตา */
     .stApp {
         background-color: #0E1117;
         color: #E2E8F0;
     }
-    
-    /* สไตล์การ์ดสรุป KPI */
     .kpi-card {
         background-color: #1E293B;
         border: 1px solid #334155;
@@ -35,7 +31,6 @@ st.markdown("""
         font-weight: 600;
         color: #94A3B8;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
         margin-bottom: 6px;
     }
     .kpi-value {
@@ -57,7 +52,7 @@ def load_data():
     conn = sqlite3.connect('transport.db')
     try:
         df = pd.read_sql("SELECT * FROM shipments", conn)
-        if 'Trip_Date' in df.columns:
+        if 'Trip_Date' in df.columns and not df.empty:
             df['Trip_Date'] = pd.to_datetime(df['Trip_Date'])
     except Exception:
         df = pd.DataFrame()
@@ -67,18 +62,15 @@ def load_data():
 
 raw_df = load_data()
 
-# Header ส่วนบน
-st.markdown("<h2 style='color:#F8FAFC; font-weight:800; margin-bottom: 0px;'>📊 Logistics & Transportation Analytics</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='color:#F8FAFC; font-weight:800; margin-bottom: 0px;'>📊 Executive Transportation Dashboard</h2>", unsafe_allow_html=True)
 st.markdown("<p style='color:#94A3B8; margin-bottom: 20px;'>ภาพรวมประสิทธิภาพการขนส่ง ต้นทุนเชื้อเพลิง และการปล่อยก๊าซเรือนกระจก — บริษัท ABC</p>", unsafe_allow_html=True)
 
 if not raw_df.empty:
-    # ------------------------------------
-    # 🔍 SIDEBAR FILTER
-    # ------------------------------------
+    # --- SIDEBAR FILTER ---
     st.sidebar.markdown("### 🎯 ตัวกรองข้อมูล")
     
-    min_date = raw_df['Trip_Date'].min() if 'Trip_Date' in raw_df.columns else None
-    max_date = raw_df['Trip_Date'].max() if 'Trip_Date' in raw_df.columns else None
+    min_date = raw_df['Trip_Date'].min() if 'Trip_Date' in raw_df.columns and not raw_df['Trip_Date'].isna().all() else None
+    max_date = raw_df['Trip_Date'].max() if 'Trip_Date' in raw_df.columns and not raw_df['Trip_Date'].isna().all() else None
     
     if min_date and max_date:
         date_range = st.sidebar.date_input(
@@ -95,7 +87,7 @@ if not raw_df.empty:
     else:
         df = raw_df.copy()
 
-    if 'Vehicle_Type' in df.columns:
+    if 'Vehicle_Type' in df.columns and not df.empty:
         v_types = ['ทั้งหมด'] + list(df['Vehicle_Type'].dropna().unique())
         selected_vtype = st.sidebar.selectbox("ประเภทรถ:", v_types)
         if selected_vtype != 'ทั้งหมด':
@@ -103,16 +95,14 @@ if not raw_df.empty:
 
     st.sidebar.caption(f"📌 แสดงข้อมูล **{len(df):,}** / {len(raw_df):,} รายการ")
 
-    # ------------------------------------
-    # 📌 TOP KPI CARDS
-    # ------------------------------------
+    # --- TOP KPI CARDS ---
     total_trips = len(df)
     total_distance = df['Distance_km'].sum() if 'Distance_km' in df.columns else 0
     total_fuel = df['Fuel_Liters'].sum() if 'Fuel_Liters' in df.columns else 0
     avg_efficiency = (total_distance / total_fuel) if total_fuel > 0 else 0
-    co2_emission = (total_fuel * 2.68) / 1000  # ตัน CO2
+    co2_emission = (total_fuel * 2.68) / 1000
 
-    total_revenue = df['Revenue_THB'].sum() if 'Revenue_THB' in df.columns else 0
+    total_revenue = df['Revenue_THB'].sum() if 'Revenue_THB' in df.columns else (df['Agreed_Price_THB'].sum() if 'Agreed_Price_THB' in df.columns else 0)
     total_fuel_cost = df['Fuel_Cost_THB'].sum() if 'Fuel_Cost_THB' in df.columns else 0
     total_profit = df['Profit_THB'].sum() if 'Profit_THB' in df.columns else (total_revenue - total_fuel_cost)
     profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
@@ -156,9 +146,7 @@ if not raw_df.empty:
 
     st.write("")
 
-    # ------------------------------------
-    # 📈 CHARTS SECTION 1 (ROW 1)
-    # ------------------------------------
+    # --- CHARTS SECTION 1 ---
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -206,9 +194,7 @@ if not raw_df.empty:
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
-    # ------------------------------------
-    # 📈 CHARTS SECTION 2 (ROW 2)
-    # ------------------------------------
+    # --- CHARTS SECTION 2 ---
     col_b1, col_b2 = st.columns(2)
 
     with col_b1:
@@ -244,25 +230,30 @@ if not raw_df.empty:
                 Total_Dist=('Distance_km', 'sum'),
                 Total_Fuel=('Fuel_Liters', 'sum')
             ).reset_index()
-            eff_df['KM_per_Liter'] = (eff_df['Total_Dist'] / eff_df['Total_Fuel']).round(2)
             
-            fig_eff = px.bar(
-                eff_df, 
-                x='Vehicle_Type', 
-                y='KM_per_Liter',
-                template="plotly_dark",
-                color='KM_per_Liter',
-                color_continuous_scale='Emerald',
-                text='KM_per_Liter'
-            )
-            fig_eff.update_layout(
-                height=300,
-                margin=dict(t=10, b=10, l=10, r=10),
-                coloraxis_showscale=False,
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig_eff, use_container_width=True)
+            # กรองป้องกันการหารด้วยศูนย์
+            eff_df = eff_df[eff_df['Total_Fuel'] > 0]
+            
+            if not eff_df.empty:
+                eff_df['KM_per_Liter'] = (eff_df['Total_Dist'] / eff_df['Total_Fuel']).round(2)
+                
+                fig_eff = px.bar(
+                    eff_df, 
+                    x='Vehicle_Type', 
+                    y='KM_per_Liter',
+                    template="plotly_dark",
+                    color='KM_per_Liter',
+                    color_continuous_scale='Viridis',  # ปรับเป็น Viridis ชัวร์ 100% ไม่ติด Error
+                    text='KM_per_Liter'
+                )
+                fig_eff.update_layout(
+                    height=300, 
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    coloraxis_showscale=False,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig_eff, use_container_width=True)
 
 else:
-    st.info("💡 ไม่พบข้อมูลในระบบ กรุณาอัปโหลดไฟล์ในหน้า Import Data")
+    st.info("💡 ไม่พบข้อมูลในระบบ หรือข้อมูลถูกรีเซ็ตเรียบร้อยแล้ว กรุณาไปที่หน้า Import Data เพื่ออัปโหลดไฟล์ Excel ใหม่ครับ")
