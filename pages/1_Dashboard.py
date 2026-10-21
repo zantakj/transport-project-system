@@ -7,36 +7,40 @@ import plotly.graph_objects as go
 # 1. ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="Transportation Dashboard", page_icon="📊", layout="wide")
 
-# 2. ปรับแต่งสไตล์ Modern Light UI
+# 2. ตกแต่งด้วย CSS สไตล์ Dark Mode สบายตา (SaaS Card Style)
 st.markdown("""
 <style>
+    /* พื้นหลังหลักของแอป - สีกรมท่าเข้ม สบายตา */
     .stApp {
-        background-color: #F8FAFC;
-        color: #1E293B;
+        background-color: #0E1117;
+        color: #E2E8F0;
     }
+    
+    /* สไตล์การ์ดสรุป KPI */
     .kpi-card {
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
+        background-color: #1E293B;
+        border: 1px solid #334155;
         border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        padding: 18px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     }
     .kpi-title {
-        font-size: 0.875rem;
+        font-size: 0.85rem;
         font-weight: 600;
-        color: #64748B;
+        color: #94A3B8;
         text-transform: uppercase;
-        margin-bottom: 8px;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
     }
     .kpi-value {
-        font-size: 1.875rem;
+        font-size: 1.8rem;
         font-weight: 700;
-        color: #0F172A;
+        color: #F8FAFC;
     }
     .kpi-sub {
         font-size: 0.8rem;
         font-weight: 500;
-        color: #10B981;
+        color: #34D399;
         margin-top: 4px;
     }
 </style>
@@ -57,12 +61,14 @@ def load_data():
 
 raw_df = load_data()
 
-# 4. แสดงส่วนหัวของ Dashboard
-st.markdown("<h2 style='color:#0F172A; font-weight:800; margin-bottom: 0px;'>📊 Logistics & Transportation Analytics</h2>", unsafe_allow_html=True)
-st.markdown("<p style='color:#64748B; margin-bottom: 24px;'>ภาพรวมประสิทธิภาพการขนส่ง ต้นทุนเชื้อเพลิง และการปล่อยก๊าซเรือนกระจก — บริษัท ABC</p>", unsafe_allow_html=True)
+# Header ส่วนบน
+st.markdown("<h2 style='color:#F8FAFC; font-weight:800; margin-bottom: 0px;'>📊 Logistics & Transportation Analytics</h2>", unsafe_allow_html=True)
+st.markdown("<p style='color:#94A3B8; margin-bottom: 20px;'>ภาพรวมประสิทธิภาพการขนส่ง ต้นทุนเชื้อเพลิง และการปล่อยก๊าซเรือนกระจก — บริษัท ABC</p>", unsafe_allow_html=True)
 
 if not raw_df.empty:
-    # --- Sidebar Filters ---
+    # ------------------------------------
+    # 🔍 SIDEBAR FILTER
+    # ------------------------------------
     st.sidebar.markdown("### 🎯 ตัวกรองข้อมูล")
     
     min_date = raw_df['Trip_Date'].min() if 'Trip_Date' in raw_df.columns else None
@@ -91,25 +97,26 @@ if not raw_df.empty:
 
     st.sidebar.caption(f"📌 แสดงข้อมูล **{len(df):,}** / {len(raw_df):,} รายการ")
 
-    # --- KPI Summary Calculation ---
+    # ------------------------------------
+    # 📌 TOP KPI CARDS
+    # ------------------------------------
     total_trips = len(df)
     total_distance = df['Distance_km'].sum() if 'Distance_km' in df.columns else 0
     total_fuel = df['Fuel_Liters'].sum() if 'Fuel_Liters' in df.columns else 0
     avg_efficiency = (total_distance / total_fuel) if total_fuel > 0 else 0
-    co2_emission = (total_fuel * 2.68) / 1000
+    co2_emission = (total_fuel * 2.68) / 1000  # ตัน CO2
 
     total_revenue = df['Revenue_THB'].sum() if 'Revenue_THB' in df.columns else 0
     total_fuel_cost = df['Fuel_Cost_THB'].sum() if 'Fuel_Cost_THB' in df.columns else 0
     total_profit = df['Profit_THB'].sum() if 'Profit_THB' in df.columns else (total_revenue - total_fuel_cost)
     profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
 
-    # --- Top KPI Cards ---
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"""
         <div class="kpi-card">
             <div class="kpi-title">📦 เที่ยววิ่งรวมทั้งหมด</div>
-            <div class="kpi-value">{total_trips:,} <span style="font-size:1rem; color:#64748B;">เที่ยว</span></div>
+            <div class="kpi-value">{total_trips:,} <span style="font-size:1rem; color:#94A3B8;">เที่ยว</span></div>
             <div class="kpi-sub">ระยะทางรวม {total_distance:,.0f} กม.</div>
         </div>
         """, unsafe_allow_html=True)
@@ -118,7 +125,7 @@ if not raw_df.empty:
         st.markdown(f"""
         <div class="kpi-card">
             <div class="kpi-title">⚡ อัตราสิ้นเปลืองเฉลี่ย</div>
-            <div class="kpi-value">{avg_efficiency:.2f} <span style="font-size:1rem; color:#64748B;">กม./ลิตร</span></div>
+            <div class="kpi-value">{avg_efficiency:.2f} <span style="font-size:1rem; color:#94A3B8;">กม./ลิตร</span></div>
             <div class="kpi-sub">ปริมาณน้ำมัน {total_fuel:,.0f} ลิตร</div>
         </div>
         """, unsafe_allow_html=True)
@@ -136,18 +143,20 @@ if not raw_df.empty:
         st.markdown(f"""
         <div class="kpi-card">
             <div class="kpi-title">🌿 การปล่อยคาร์บอน (CO₂)</div>
-            <div class="kpi-value">{co2_emission:,.2f} <span style="font-size:1rem; color:#64748B;">ตัน</span></div>
-            <div class="kpi-sub" style="color:#2563EB;">Profit Margin: {profit_margin:.1f}%</div>
+            <div class="kpi-value">{co2_emission:,.2f} <span style="font-size:1rem; color:#94A3B8;">ตัน</span></div>
+            <div class="kpi-sub" style="color:#60A5FA;">Profit Margin: {profit_margin:.1f}%</div>
         </div>
         """, unsafe_allow_html=True)
 
     st.write("")
 
-    # --- Charts Section 1 ---
+    # ------------------------------------
+    # 📈 CHARTS SECTION 1 (ROW 1)
+    # ------------------------------------
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.markdown("#### 📈 แนวโน้มรายได้ และ ค่าน้ำมันเชื้อเพลิงรายเดือน")
+        st.markdown("<h4 style='color:#F8FAFC;'>📈 แนวโน้มรายได้ และ ค่าน้ำมันเชื้อเพลิงรายเดือน</h4>", unsafe_allow_html=True)
         if 'Year_Month' in df.columns and not df.empty:
             monthly = df.groupby('Year_Month').agg(
                 Revenue=('Revenue_THB', 'sum'),
@@ -155,20 +164,22 @@ if not raw_df.empty:
             ).reset_index()
             
             fig_trend = go.Figure()
-            fig_trend.add_trace(go.Bar(x=monthly['Year_Month'], y=monthly['Revenue'], name='รายได้ (บาท)', marker_color='#2563EB'))
+            fig_trend.add_trace(go.Bar(x=monthly['Year_Month'], y=monthly['Revenue'], name='รายได้ (บาท)', marker_color='#3B82F6'))
             fig_trend.add_trace(go.Bar(x=monthly['Year_Month'], y=monthly['Fuel_Cost'], name='ค่าน้ำมัน (บาท)', marker_color='#F59E0B'))
             
             fig_trend.update_layout(
-                template="plotly_white",
+                template="plotly_dark",
                 barmode='group',
                 height=300,
                 margin=dict(t=10, b=10, l=10, r=10),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_trend, use_container_width=True)
 
     with col_right:
-        st.markdown("#### 🚚 สัดส่วนประเภทรถที่ใช้ในการขนส่ง")
+        st.markdown("<h4 style='color:#F8FAFC;'>🚚 สัดส่วนประเภทรถที่ใช้ในการขนส่ง</h4>", unsafe_allow_html=True)
         if 'Vehicle_Type' in df.columns and not df.empty:
             vtype_counts = df['Vehicle_Type'].value_counts().reset_index()
             vtype_counts.columns = ['Vehicle_Type', 'Count']
@@ -178,20 +189,24 @@ if not raw_df.empty:
                 names='Vehicle_Type', 
                 values='Count',
                 hole=0.5,
-                template="plotly_white",
+                template="plotly_dark",
                 color_discrete_sequence=['#3B82F6', '#10B981', '#F59E0B', '#6366F1']
             )
             fig_pie.update_layout(
                 height=300,
-                margin=dict(t=10, b=10, l=10, r=10)
+                margin=dict(t=10, b=10, l=10, r=10),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
-    # --- Charts Section 2 ---
+    # ------------------------------------
+    # 📈 CHARTS SECTION 2 (ROW 2)
+    # ------------------------------------
     col_b1, col_b2 = st.columns(2)
 
     with col_b1:
-        st.markdown("#### 📍 Top 10 เส้นทางที่มีเที่ยววิ่งมากที่สุด")
+        st.markdown("<h4 style='color:#F8FAFC;'>📍 Top 10 เส้นทางที่มีเที่ยววิ่งมากที่สุด</h4>", unsafe_allow_html=True)
         if 'Route_Code' in df.columns and not df.empty:
             top_routes = df['Route_Code'].value_counts().head(10).reset_index()
             top_routes.columns = ['Route_Code', 'Trips']
@@ -201,7 +216,7 @@ if not raw_df.empty:
                 x='Trips', 
                 y='Route_Code', 
                 orientation='h',
-                template="plotly_white",
+                template="plotly_dark",
                 color='Trips',
                 color_continuous_scale='Blues',
                 text='Trips'
@@ -210,12 +225,14 @@ if not raw_df.empty:
                 yaxis=dict(autorange="reversed"),
                 height=300,
                 margin=dict(t=10, b=10, l=10, r=10),
-                coloraxis_showscale=False
+                coloraxis_showscale=False,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_route, use_container_width=True)
 
     with col_b2:
-        st.markdown("#### ⚡ อัตราสิ้นเปลืองน้ำมันแยกตามประเภทรถ (กม./ลิตร)")
+        st.markdown("<h4 style='color:#F8FAFC;'>⚡ อัตราสิ้นเปลืองน้ำมันแยกตามประเภทรถ (กม./ลิตร)</h4>", unsafe_allow_html=True)
         if 'Vehicle_Type' in df.columns and 'Distance_km' in df.columns and 'Fuel_Liters' in df.columns and not df.empty:
             eff_df = df.groupby('Vehicle_Type').agg(
                 Total_Dist=('Distance_km', 'sum'),
@@ -227,7 +244,7 @@ if not raw_df.empty:
                 eff_df, 
                 x='Vehicle_Type', 
                 y='KM_per_Liter',
-                template="plotly_white",
+                template="plotly_dark",
                 color='KM_per_Liter',
                 color_continuous_scale='Emerald',
                 text='KM_per_Liter'
@@ -235,7 +252,9 @@ if not raw_df.empty:
             fig_eff.update_layout(
                 height=300,
                 margin=dict(t=10, b=10, l=10, r=10),
-                coloraxis_showscale=False
+                coloraxis_showscale=False,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_eff, use_container_width=True)
 
