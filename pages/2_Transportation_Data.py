@@ -1,66 +1,38 @@
-import streamlit as st
-
-# ตรวจสอบสิทธิ์การเข้าถึง
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
-    st.stop()
 import sqlite3
 import pandas as pd
 import streamlit as st
 
-st.title("🚚 ตารางข้อมูลการขนส่ง")
+# 🚨 ดักสิทธิ์เข้าถึงชั้นที่ 2
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
+    st.stop()
 
-# ฟังก์ชันดึงข้อมูลจากตาราง shipments
-def get_transport_data():
+st.set_page_config(page_title="Transportation Data Management", page_icon="🚚", layout="wide")
+
+st.title("🚚 Transportation Data Management")
+st.caption("ตารางจัดการและค้นหาข้อมูลการขนส่งทั้งหมดในฐานข้อมูลระบบ")
+
+def load_data():
     conn = sqlite3.connect('transport.db')
-    cursor = conn.cursor()
-    
-    # ตรวจสอบว่ามีตาราง shipments หรือไม่
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='shipments';")
-    has_table = cursor.fetchone()
-    
-    if not has_table:
-        conn.close()
-        return pd.DataFrame()
-        
     try:
-        # เรียงลำดับจาก ID ล่าสุดขึ้นก่อน
-        query = "SELECT * FROM shipments ORDER BY id DESC"
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql("SELECT * FROM shipments", conn)
     except Exception:
-        # หากไม่มีคอลัมน์ id ให้ดึงแบบธรรมดา
-        query = "SELECT * FROM shipments"
-        df = pd.read_sql(query, conn)
+        df = pd.DataFrame()
     finally:
         conn.close()
-        
     return df
 
-# ดึงข้อมูลล่าสุด
-df = get_transport_data()
+df = load_data()
 
 if not df.empty:
-    # ส่วนเลือกโหมดการแสดงผล
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        view_mode = st.radio(
-            "เลือกรูปแบบการแสดงผลข้อมูล:",
-            ["เฉพาะรายการล่าสุด (เพิ่งเพิ่ม)", "แสดงข้อมูลทั้งหมดในระบบ"],
-            horizontal=True
-        )
+    search = st.text_input("🔍 ค้นหารหัสเที่ยววิ่ง / ประเภทรถ / เส้นทาง:", "")
+    if search:
+        df = df[
+            df['Trip_ID'].astype(str).str.contains(search, case=False) |
+            df['Vehicle_Type'].astype(str).str.contains(search, case=False) |
+            df['Route_Code'].astype(str).str.contains(search, case=False)
+        ]
     
-    if view_mode == "เฉพาะรายการล่าสุด (เพิ่งเพิ่ม)":
-        with col2:
-            num_items = st.number_input("จำนวนรายการล่าสุด:", min_value=1, max_value=500, value=10)
-        
-        display_df = df.head(num_items)
-        st.caption(f"📌 กำลังแสดงข้อมูลล่าสุด **{len(display_df)}** รายการ จากทั้งหมด {len(df)} รายการ")
-    else:
-        display_df = df
-        st.caption(f"📊 กำลังแสดงข้อมูลทั้งหมด **{len(display_df)}** รายการ")
-
-    # แสดงตารางข้อมูล
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
-
+    st.dataframe(df, use_container_width=True, hide_index=True)
 else:
-    st.info("💡 ยังไม่มีข้อมูลในฐานข้อมูล กรุณาไปที่หน้า Import Data เพื่ออัปโหลดไฟล์ข้อมูลก่อนครับ")
+    st.info("💡 ไม่พบข้อมูลในระบบ กรุณาอัปโหลดไฟล์ในหน้า Import Data")
