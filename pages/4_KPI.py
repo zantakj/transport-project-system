@@ -8,10 +8,10 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
     st.stop()
 
-st.set_page_config(page_title="KPI", page_icon="⛽", layout="wide")
+st.set_page_config(page_title="KPI & Cost Analytics", page_icon="⛽", layout="wide")
 
-st.title("🎯 4. KPI")
-st.caption("ระบบคำนวณต้นทุนการขนส่งเปรียบเทียบราคาน้ำมัน และ กำหนดค่าเสื่อมสภาพได้ตามต้องการ")
+st.title("🎯 KPI & Real-Time Fuel Cost Analytics")
+st.caption("ระบบคำนวณต้นทุนการขนส่งเปรียบเทียบราคาน้ำมัน Real-Time และกำหนดค่าเสื่อมสภาพได้ตามต้องการ")
 
 # 🌐 ฟังก์ชันดึงราคาน้ำมัน Real-Time
 @st.cache_data(ttl=1800)
