@@ -44,64 +44,52 @@ if not st.session_state.logged_in:
     pg.run()
 else:
     # ------------------------------------
-    # 🌟 1. CSS สลับตำแหน่ง DOM ย้าย Content ขึ้นไปอยู่บนสุดเหนือ Navigation Menu
+    # 🌟 CSS ตกแต่งรายการเมนูแรกสุด (Quick Import) ให้กลายเป็นปุ่มสีส้มขนาดใหญ่เรืองแสง
     # ------------------------------------
     st.markdown("""
     <style>
-        div[data-testid="stSidebarNavItems"] {
-            order: 2 !important;
-        }
-        div[data-testid="stSidebarHeader"] {
-            order: 1 !important;
-        }
-        div[data-testid="stSidebarUserContent"] {
-            order: 0 !important;
-            margin-bottom: 20px !important;
-        }
-        
-        div[data-testid="stSidebarUserContent"] button[kind="primary"] {
+        /* ตกแต่งรายการแรกสุดของ Sidebar (Import Data) ให้เป็นปุ่มสีส้มสด */
+        ul[data-testid="stSidebarNavItems"] > li:first-child a {
             background-color: #F97316 !important;
             color: #FFFFFF !important;
             font-weight: 800 !important;
-            font-size: 1.1rem !important;
+            font-size: 1.05rem !important;
             border-radius: 10px !important;
             border: 2px solid #FB923C !important;
-            padding: 12px 16px !important;
+            padding: 10px 14px !important;
+            margin-bottom: 15px !important;
             box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important;
         }
-        div[data-testid="stSidebarUserContent"] button[kind="primary"]:hover {
+        ul[data-testid="stSidebarNavItems"] > li:first-child a:hover {
             background-color: #EA580C !important;
             box-shadow: 0 6px 20px rgba(249, 115, 22, 0.6) !important;
+        }
+        ul[data-testid="stSidebarNavItems"] > li:first-child span {
+            color: #FFFFFF !important;
+            font-weight: 800 !important;
         }
     </style>
     """, unsafe_allow_html=True)
 
     # ------------------------------------
-    # 📌 2. ส่วนสร้างปุ่ม Quick Action (อยู่บนสุดด้วย CSS order: 0)
-    # ------------------------------------
-    with st.sidebar:
-        st.markdown("### ⚡ QUICK ACTION")
-        if st.button("📥 นำเข้าข้อมูล (Import Data)", type="primary", use_container_width=True):
-            st.switch_page("pages/6_Import_Data.py")
-        st.markdown("---")
-
-    # ------------------------------------
-    # 📊 3. เมนูวิเคราะห์และ Import Data (ต้องประกาศเพื่อให้ st.switch_page ทำงานได้)
+    # 📌 จัดกลุ่มเมนูใน Navigation (ย้าย Import Data ขึ้นเป็นกลุ่มแรกสุดบนสุด)
     # ------------------------------------
     pg = st.navigation({
+        "⚡ QUICK ACTION": [
+            st.Page("pages/6_Import_Data.py", title="นำเข้าข้อมูล (Import Data)", icon="📥"),
+        ],
         "รายการเมนูวิเคราะห์ข้อมูล": [
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
             st.Page("pages/2_Transportation_Data.py", title="Transportation Data", icon="🚚"),
             st.Page("pages/3_Vehicle.py", title="Vehicle", icon="🚛"),
             st.Page("pages/4_KPI.py", title="KPI & Real-Time Fuel", icon="🎯"),
             st.Page("pages/5_Analysis.py", title="Analysis", icon="📈"),
-            st.Page("pages/6_Import_Data.py", title="Import Data", icon="📥"),
         ]
     })
     
     pg.run()
 
-    # ปุ่มออกจากระบบอยู่ล่างสุด
+    # ปุ่มออกจากระบบอยู่ล่างสุดของ Sidebar
     with st.sidebar:
         st.write("")
         if st.button("🚪 ออกจากระบบ", use_container_width=True):
