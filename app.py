@@ -43,36 +43,50 @@ if not st.session_state.logged_in:
     pg = st.navigation([st.Page(login_page, title="เข้าสู่ระบบ", icon="🔒")])
     pg.run()
 else:
-    # 🌟 แต่งปุ่มแรกสุดใน Sidebar ให้เป็นปุ่มสีส้มขนาดใหญ่เรืองแสง
+    # ------------------------------------
+    # 🌟 1. CSS บังคับให้ปุ่มใน Container ขึ้นไปอยู่บนสุดของ Sidebar
+    # ------------------------------------
     st.markdown("""
     <style>
-        div[data-testid="stSidebar"] div.stButton > button:first-child {
+        /* บังคับ Container บนสุดให้แสดงก่อน Nav Menu */
+        div[data-testid="stSidebarUserContent"] {
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        div[data-testid="stSidebarUserContent"] > div:first-child {
+            order: -1 !important;
+        }
+        /* แต่งปุ่ม Import Data ให้เป็นสีส้มสว่าง เด่นกว่าเมนูอื่น */
+        div[data-testid="stSidebar"] button[kind="primary"] {
             background-color: #F97316 !important;
             color: #FFFFFF !important;
             font-weight: 800 !important;
-            font-size: 1.1rem !important;
+            font-size: 1.05rem !important;
             border-radius: 10px !important;
             border: 2px solid #FB923C !important;
             padding: 12px 16px !important;
             box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important;
-            margin-top: 10px !important;
-            margin-bottom: 15px !important;
         }
-        div[data-testid="stSidebar"] div.stButton > button:first-child:hover {
+        div[data-testid="stSidebar"] button[kind="primary"]:hover {
             background-color: #EA580C !important;
             box-shadow: 0 6px 20px rgba(249, 115, 22, 0.6) !important;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # 📌 1. ปุ่ม Import Data บรรทัดแรกสุดของ Sidebar
-    st.sidebar.markdown("### ⚡ QUICK ACTION")
-    if st.sidebar.button("📥 นำเข้าข้อมูล (Import Data)", use_container_width=True):
-        st.switch_page("pages/6_Import_Data.py")
-    
-    st.sidebar.markdown("---")
+    # ------------------------------------
+    # 📌 2. สร้าง Container วางบนสุดของ Sidebar
+    # ------------------------------------
+    top_container = st.sidebar.container()
+    with top_container:
+        st.markdown("### ⚡ QUICK ACTION")
+        if st.button("📥 นำเข้าข้อมูล (Import Data)", type="primary", use_container_width=True):
+            st.switch_page("pages/6_Import_Data.py")
+        st.markdown("---")
 
-    # 📌 2. เมนูรายงานและ Dashboard ด้านล่าง
+    # ------------------------------------
+    # 📊 3. เมนูวิเคราะห์และ Dashboard ด้านล่าง
+    # ------------------------------------
     pg = st.navigation({
         "รายการเมนูวิเคราะห์ข้อมูล": [
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
