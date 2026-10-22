@@ -44,7 +44,7 @@ if not st.session_state.logged_in:
     pg.run()
 else:
     # ------------------------------------
-    # 🌟 CSS สลับตำแหน่ง DOM บังคับย้าย Content ขึ้นไปอยู่บนสุดเหนือ Navigation Menu
+    # 🌟 1. CSS สลับตำแหน่ง DOM ย้าย Content ขึ้นไปอยู่บนสุดเหนือ Navigation Menu
     # ------------------------------------
     st.markdown("""
     <style>
@@ -76,14 +76,18 @@ else:
     </style>
     """, unsafe_allow_html=True)
 
-    # 📌 ส่วนสร้างปุ่ม Quick Action บนสุด
+    # ------------------------------------
+    # 📌 2. ส่วนสร้างปุ่ม Quick Action (อยู่บนสุดด้วย CSS order: 0)
+    # ------------------------------------
     with st.sidebar:
         st.markdown("### ⚡ QUICK ACTION")
         if st.button("📥 นำเข้าข้อมูล (Import Data)", type="primary", use_container_width=True):
             st.switch_page("pages/6_Import_Data.py")
         st.markdown("---")
 
-    # 📊 เมนูวิเคราะห์และ Dashboard ด้านล่าง (เอาตัวเลขนำหน้าออกทั้งหมด)
+    # ------------------------------------
+    # 📊 3. เมนูวิเคราะห์และ Import Data (ต้องประกาศเพื่อให้ st.switch_page ทำงานได้)
+    # ------------------------------------
     pg = st.navigation({
         "รายการเมนูวิเคราะห์ข้อมูล": [
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
@@ -91,11 +95,13 @@ else:
             st.Page("pages/3_Vehicle.py", title="Vehicle", icon="🚛"),
             st.Page("pages/4_KPI.py", title="KPI & Real-Time Fuel", icon="🎯"),
             st.Page("pages/5_Analysis.py", title="Analysis", icon="📈"),
+            st.Page("pages/6_Import_Data.py", title="Import Data", icon="📥"),
         ]
     })
     
     pg.run()
 
+    # ปุ่มออกจากระบบอยู่ล่างสุด
     with st.sidebar:
         st.write("")
         if st.button("🚪 ออกจากระบบ", use_container_width=True):
