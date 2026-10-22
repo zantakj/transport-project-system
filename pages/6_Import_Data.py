@@ -38,17 +38,45 @@ def login_page():
                 else:
                     st.error("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง")
 
+# 🔒 หากยังไม่ Login ให้แสดงเฉพาะหน้า Login เท่านั้น (ซ่อนเมนูทั้งหมด)
 if not st.session_state.logged_in:
     pg = st.navigation([st.Page(login_page, title="เข้าสู่ระบบ", icon="🔒")])
+    pg.run()
 else:
-    # 📌 ปุ่ม Quick Import Data วางเหนือ Sidebar กดง่าย ชัดเจน
-    st.sidebar.markdown("### 📥 Quick Action")
-    if st.sidebar.button("📥 นำเข้าข้อมูล (Import Data)", type="primary", use_container_width=True):
+    # ------------------------------------
+    # 🌟 1. ตกแต่งปุ่ม Quick Import บนสุดให้โดดเด่นด้วย CSS
+    # ------------------------------------
+    st.sidebar.markdown("""
+    <style>
+        /* แต่งปุ่มแรกบน Sidebar ให้เป็นสีส้มเด่น และใหญ่พิเศษ */
+        div[data-testid="stSidebar"] div.stButton > button:first-child {
+            background-color: #F97316 !important;
+            color: white !important;
+            font-weight: 700 !important;
+            font-size: 1.05rem !important;
+            border-radius: 10px !important;
+            border: none !important;
+            padding: 12px 16px !important;
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4) !important;
+            margin-bottom: 10px !important;
+        }
+        div[data-testid="stSidebar"] div.stButton > button:first-child:hover {
+            background-color: #EA580C !important;
+            box-shadow: 0 6px 16px rgba(249, 115, 22, 0.6) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 📌 วางปุ่ม Import Data ไว้ที่บรรทัดบนสุดของ Sidebar ก่อนสร้าง Navigation
+    st.sidebar.markdown("### ⚡ ACTION MENU")
+    if st.sidebar.button("📥 นำเข้าข้อมูล (Import Data)", use_container_width=True):
         st.switch_page("pages/6_Import_Data.py")
     
-    st.sidebar.divider()
+    st.sidebar.markdown("---")
 
-    # 📌 เมนูระบบงานการวิเคราะห์
+    # ------------------------------------
+    # 📊 2. เมนูวิเคราะห์และ Dashboard ด้านล่าง
+    # ------------------------------------
     pg = st.navigation({
         "การจัดการและวิเคราะห์ข้อมูล": [
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
@@ -60,9 +88,10 @@ else:
         ]
     })
     
+    pg.run()
+
+    # ปุ่มออกจากระบบอยู่ล่างสุด
     st.sidebar.write("")
     if st.sidebar.button("🚪 ออกจากระบบ", use_container_width=True):
         st.session_state.logged_in = False
         st.rerun()
-
-pg.run()
