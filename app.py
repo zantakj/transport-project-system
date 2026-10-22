@@ -44,11 +44,10 @@ if not st.session_state.logged_in:
     pg.run()
 else:
     # ------------------------------------
-    # 🌟 CSS ตกแต่งรายการเมนูแรกสุด (Quick Import) ให้กลายเป็นปุ่มสีส้มขนาดใหญ่เรืองแสง
+    # 🌟 CSS ตกแต่งเมนู Import Data บนสุดให้กลายเป็นปุ่มสีส้มขนาดใหญ่เรืองแสง
     # ------------------------------------
     st.markdown("""
     <style>
-        /* ตกแต่งรายการแรกสุดของ Sidebar (Import Data) ให้เป็นปุ่มสีส้มสด */
         ul[data-testid="stSidebarNavItems"] > li:first-child a {
             background-color: #F97316 !important;
             color: #FFFFFF !important;
@@ -71,9 +70,7 @@ else:
     </style>
     """, unsafe_allow_html=True)
 
-    # ------------------------------------
-    # 📌 จัดกลุ่มเมนูใน Navigation (ย้าย Import Data ขึ้นเป็นกลุ่มแรกสุดบนสุด)
-    # ------------------------------------
+    # 📌 จัดกลุ่มเมนูใน Navigation (ให้ Import Data อยู่บนสุดเป็น Quick Action)
     pg = st.navigation({
         "⚡ QUICK ACTION": [
             st.Page("pages/6_Import_Data.py", title="นำเข้าข้อมูล (Import Data)", icon="📥"),
@@ -89,7 +86,7 @@ else:
     
     pg.run()
 
-    # ปุ่มออกจากระบบอยู่ล่างสุดของ Sidebar
+    # ปุ่มออกจากระบบอยู่ล่างสุด
     with st.sidebar:
         st.write("")
         if st.button("🚪 ออกจากระบบ", use_container_width=True):
