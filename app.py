@@ -8,7 +8,6 @@ def clear_old_database():
     try:
         conn = sqlite3.connect('transport.db')
         cursor = conn.cursor()
-        # ลบข้อมูลในตาราง shipments ออกทั้งหมด
         cursor.execute("DELETE FROM shipments")
         conn.commit()
         conn.close()
@@ -20,6 +19,7 @@ if "logged_in" not in st.session_state:
 
 def login_page():
     st.markdown("<h2 style='text-align: center;'>🔒 เข้าสู่ระบบบริหารจัดการการขนส่ง</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #64748B;'>กรณีศึกษา: บริษัท ABC</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -31,32 +31,62 @@ def login_page():
             if submit_button:
                 if username == "admin" and password == "1234":
                     st.session_state.logged_in = True
-                    
-                    # 🧹 ล้างข้อมูลเก่าค้างในระบบทิ้งทันทีเมื่อ Login สำเร็จ!
                     clear_old_database()
-                    st.cache_data.clear()  # เคลียร์ความจำ Cache ของ Streamlit
-                    
+                    st.cache_data.clear()
                     st.success("เข้าสู่ระบบสำเร็จ! (ทำการรีเซ็ตข้อมูลเก่าในระบบเรียบร้อยแล้ว)")
                     st.rerun()
                 else:
                     st.error("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง")
 
+# 🔒 หากยังไม่ Login ให้แสดงเฉพาะหน้า Login เท่านั้น
 if not st.session_state.logged_in:
     pg = st.navigation([st.Page(login_page, title="เข้าสู่ระบบ", icon="🔒")])
+    pg.run()
 else:
+    # 🌟 แต่งปุ่มแรกสุดใน Sidebar ให้เป็นปุ่มสีส้มขนาดใหญ่เรืองแสง
+    st.markdown("""
+    <style>
+        div[data-testid="stSidebar"] div.stButton > button:first-child {
+            background-color: #F97316 !important;
+            color: #FFFFFF !important;
+            font-weight: 800 !important;
+            font-size: 1.1rem !important;
+            border-radius: 10px !important;
+            border: 2px solid #FB923C !important;
+            padding: 12px 16px !important;
+            box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important;
+            margin-top: 10px !important;
+            margin-bottom: 15px !important;
+        }
+        div[data-testid="stSidebar"] div.stButton > button:first-child:hover {
+            background-color: #EA580C !important;
+            box-shadow: 0 6px 20px rgba(249, 115, 22, 0.6) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 📌 1. ปุ่ม Import Data บรรทัดแรกสุดของ Sidebar
+    st.sidebar.markdown("### ⚡ QUICK ACTION")
+    if st.sidebar.button("📥 นำเข้าข้อมูล (Import Data)", use_container_width=True):
+        st.switch_page("pages/6_Import_Data.py")
+    
+    st.sidebar.markdown("---")
+
+    # 📌 2. เมนูรายงานและ Dashboard ด้านล่าง
     pg = st.navigation({
-        "การจัดการและวิเคราะห์ข้อมูล": [
+        "รายการเมนูวิเคราะห์ข้อมูล": [
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
             st.Page("pages/2_Transportation_Data.py", title="Transportation Data", icon="🚚"),
             st.Page("pages/3_Vehicle.py", title="Vehicle", icon="🚛"),
             st.Page("pages/4_KPI.py", title="KPI & Real-Time Fuel", icon="🎯"),
             st.Page("pages/5_Analysis.py", title="Analysis", icon="📈"),
-            st.Page("pages/6_Import_Data.py", title="Import Data", icon="📥"),
         ]
     })
     
+    pg.run()
+
+    # ปุ่มออกจากระบบอยู่ล่างสุด
+    st.sidebar.write("")
     if st.sidebar.button("🚪 ออกจากระบบ", use_container_width=True):
         st.session_state.logged_in = False
         st.rerun()
-
-pg.run()
