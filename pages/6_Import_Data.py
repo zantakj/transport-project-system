@@ -1,6 +1,8 @@
 import sqlite3
 import streamlit as st
-
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
+    st.stop()
 st.set_page_config(page_title="ระบบบริหารจัดการการขนส่ง - บริษัท ABC", page_icon="🚚", layout="wide")
 
 # ฟังก์ชันลบข้อมูลเก่าทั้งหมดออกจากฐานข้อมูลเมื่อ Login ใหม่
