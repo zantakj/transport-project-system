@@ -79,7 +79,7 @@ else:
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
             st.Page("pages/2_Transportation_Data.py", title="Transportation Data", icon="🚚"),
             st.Page("pages/3_Vehicle.py", title="Vehicle", icon="🚛"),
-            st.Page("pages/4_KPI.py", title="KPI & Real-Time Fuel", icon="🎯"),
+            st.Page("pages/4_KPI.py", title="KPI & Cost Analytics", icon="🎯"),
             st.Page("pages/5_Analysis.py", title="Analysis", icon="📈"),
         ]
     })
