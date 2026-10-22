@@ -44,11 +44,10 @@ if not st.session_state.logged_in:
     pg.run()
 else:
     # ------------------------------------
-    # 🌟 1. CSS สลับตำแหน่ง DOM บังคับย้าย Content ขึ้นไปอยู่บนสุดเหนือ Navigation Menu
+    # 🌟 CSS สลับตำแหน่ง DOM บังคับย้าย Content ขึ้นไปอยู่บนสุดเหนือ Navigation Menu
     # ------------------------------------
     st.markdown("""
     <style>
-        /* บังคับพาเรนท์คอนเทนเนอร์ของ Sidebar ให้จัดเรียงแบบ Flexbox */
         div[data-testid="stSidebarNavItems"] {
             order: 2 !important;
         }
@@ -56,11 +55,10 @@ else:
             order: 1 !important;
         }
         div[data-testid="stSidebarUserContent"] {
-            order: 0 !important; /* ย้าย User Content ทั้งหมดขึ้นไปไว้บนสุด */
+            order: 0 !important;
             margin-bottom: 20px !important;
         }
         
-        /* ตกแต่งปุ่ม Import Data ให้โดดเด่น */
         div[data-testid="stSidebarUserContent"] button[kind="primary"] {
             background-color: #F97316 !important;
             color: #FFFFFF !important;
@@ -78,18 +76,14 @@ else:
     </style>
     """, unsafe_allow_html=True)
 
-    # ------------------------------------
-    # 📌 2. ส่วนสร้างปุ่ม Quick Action (จะถูกย้ายขึ้นไปอยู่บนสุดด้วย CSS order: 0)
-    # ------------------------------------
+    # 📌 ส่วนสร้างปุ่ม Quick Action บนสุด
     with st.sidebar:
         st.markdown("### ⚡ QUICK ACTION")
         if st.button("📥 นำเข้าข้อมูล (Import Data)", type="primary", use_container_width=True):
             st.switch_page("pages/6_Import_Data.py")
         st.markdown("---")
 
-    # ------------------------------------
-    # 📊 3. เมนูวิเคราะห์และ Dashboard ด้านล่าง
-    # ------------------------------------
+    # 📊 เมนูวิเคราะห์และ Dashboard ด้านล่าง (เอาตัวเลขนำหน้าออกทั้งหมด)
     pg = st.navigation({
         "รายการเมนูวิเคราะห์ข้อมูล": [
             st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊"),
@@ -102,7 +96,6 @@ else:
     
     pg.run()
 
-    # ปุ่มออกจากระบบอยู่ล่างสุด
     with st.sidebar:
         st.write("")
         if st.button("🚪 ออกจากระบบ", use_container_width=True):
