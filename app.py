@@ -44,30 +44,34 @@ if not st.session_state.logged_in:
     pg.run()
 else:
     # ------------------------------------
-    # 🌟 1. CSS บังคับให้ปุ่มใน Container ขึ้นไปอยู่บนสุดของ Sidebar
+    # 🌟 1. CSS สลับตำแหน่ง DOM บังคับย้าย Content ขึ้นไปอยู่บนสุดเหนือ Navigation Menu
     # ------------------------------------
     st.markdown("""
     <style>
-        /* บังคับ Container บนสุดให้แสดงก่อน Nav Menu */
+        /* บังคับพาเรนท์คอนเทนเนอร์ของ Sidebar ให้จัดเรียงแบบ Flexbox */
+        div[data-testid="stSidebarNavItems"] {
+            order: 2 !important;
+        }
+        div[data-testid="stSidebarHeader"] {
+            order: 1 !important;
+        }
         div[data-testid="stSidebarUserContent"] {
-            display: flex !important;
-            flex-direction: column !important;
+            order: 0 !important; /* ย้าย User Content ทั้งหมดขึ้นไปไว้บนสุด */
+            margin-bottom: 20px !important;
         }
-        div[data-testid="stSidebarUserContent"] > div:first-child {
-            order: -1 !important;
-        }
-        /* แต่งปุ่ม Import Data ให้เป็นสีส้มสว่าง เด่นกว่าเมนูอื่น */
-        div[data-testid="stSidebar"] button[kind="primary"] {
+        
+        /* ตกแต่งปุ่ม Import Data ให้โดดเด่น */
+        div[data-testid="stSidebarUserContent"] button[kind="primary"] {
             background-color: #F97316 !important;
             color: #FFFFFF !important;
             font-weight: 800 !important;
-            font-size: 1.05rem !important;
+            font-size: 1.1rem !important;
             border-radius: 10px !important;
             border: 2px solid #FB923C !important;
             padding: 12px 16px !important;
             box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important;
         }
-        div[data-testid="stSidebar"] button[kind="primary"]:hover {
+        div[data-testid="stSidebarUserContent"] button[kind="primary"]:hover {
             background-color: #EA580C !important;
             box-shadow: 0 6px 20px rgba(249, 115, 22, 0.6) !important;
         }
@@ -75,10 +79,9 @@ else:
     """, unsafe_allow_html=True)
 
     # ------------------------------------
-    # 📌 2. สร้าง Container วางบนสุดของ Sidebar
+    # 📌 2. ส่วนสร้างปุ่ม Quick Action (จะถูกย้ายขึ้นไปอยู่บนสุดด้วย CSS order: 0)
     # ------------------------------------
-    top_container = st.sidebar.container()
-    with top_container:
+    with st.sidebar:
         st.markdown("### ⚡ QUICK ACTION")
         if st.button("📥 นำเข้าข้อมูล (Import Data)", type="primary", use_container_width=True):
             st.switch_page("pages/6_Import_Data.py")
@@ -100,7 +103,8 @@ else:
     pg.run()
 
     # ปุ่มออกจากระบบอยู่ล่างสุด
-    st.sidebar.write("")
-    if st.sidebar.button("🚪 ออกจากระบบ", use_container_width=True):
-        st.session_state.logged_in = False
-        st.rerun()
+    with st.sidebar:
+        st.write("")
+        if st.button("🚪 ออกจากระบบ", use_container_width=True):
+            st.session_state.logged_in = False
+            st.rerun()
