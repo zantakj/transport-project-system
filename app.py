@@ -4,7 +4,7 @@ st.set_page_config(
     page_title="ระบบบริหารจัดการการขนส่ง", page_icon="🚛", layout="wide"
 )
 
-# --- 1. กำหนดเส้นทางหน้า Multi-page ---
+# กำหนดเส้นทางหน้า Multi-page
 dashboard_page = st.Page("pages/1_Dashboard.py", title="Dashboard", icon="📊")
 transport_data_page = st.Page(
     "pages/2_Transportation_Data.py", title="Transportation Data", icon="📋"
@@ -18,7 +18,7 @@ import_data_page = st.Page(
     "pages/6_Import_Data.py", title="นำเข้าข้อมูล (Import Data)", icon="📥"
 )
 
-# --- 2. ตั้งค่าระบบนำทาง Navigation ---
+# ตั้งค่าระบบนำทาง Navigation
 pg = st.navigation({
     "QUICK ACTION": [import_data_page],
     "รายการเมนูวิเคราะห์ข้อมูล": [
@@ -30,5 +30,4 @@ pg = st.navigation({
     ],
 })
 
-# --- 3. รันระบบหน้าเว็บ ---
 pg.run()
