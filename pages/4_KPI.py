@@ -74,8 +74,6 @@ depreciation_10w = st.sidebar.number_input(
     "ค่าเสื่อม 10W (บาท/เที่ยว)", value=800.0, step=50.0
 )
 
-
-# ฟังก์ชันเลือกค่าเสื่อมตามประเภทรถของแต่ละแถวข้อมูล
 def get_dynamic_depreciation(vehicle_type):
   v_type = str(vehicle_type).upper()
   if "4W" in v_type:
@@ -92,7 +90,7 @@ df["Maintenance_Allocated_THB_Per_Trip"] = df["Vehicle_Type"].apply(
     get_dynamic_depreciation
 )
 
-    calc_df = df.copy()
+calc_df = df.copy()
 
     if price_mode == "🌐 ราคาน้ำมันดีเซล Real-Time วันนี้":
         calc_df['Calculated_Fuel_Cost'] = calc_df['Fuel_Liters'] * active_fuel_price
