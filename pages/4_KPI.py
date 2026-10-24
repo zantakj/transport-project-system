@@ -59,10 +59,38 @@ if not df.empty:
         active_fuel_price = None
         st.sidebar.info("💡 ใช้ข้อมูลค่าน้ำมันเดิมในตารางเอกสาร")
 
-    st.sidebar.divider()
-    st.sidebar.markdown("### 🛠️ ปรับค่าเสื่อมสภาพยานพาหนะ")
-    apply_dep = st.sidebar.checkbox("คำนวณรวมค่าเสื่อมสภาพ", value=True)
-    dep_per_trip = st.sidebar.number_input("ค่าเสื่อมสภาพต่อเที่ยว (บาท/เที่ยว):", value=1900.0, step=100.0) if apply_dep else 0.0
+    # --- วางโค้ดนี้ใน Sidebar ของไฟล์ 4_KPI.py ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("🛠️ ปรับค่าเสื่อมสภาพยานพาหนะ (แยกตามประเภท)")
+
+# ช่องกรอกแยกประเภทรถ 4W, 6W, 10W
+depreciation_4w = st.sidebar.number_input(
+    "ค่าเสื่อม 4W (บาท/เที่ยว)", value=250.0, step=50.0
+)
+depreciation_6w = st.sidebar.number_input(
+    "ค่าเสื่อม 6W (บาท/เที่ยว)", value=500.0, step=50.0
+)
+depreciation_10w = st.sidebar.number_input(
+    "ค่าเสื่อม 10W (บาท/เที่ยว)", value=800.0, step=50.0
+)
+
+
+# ฟังก์ชันเลือกค่าเสื่อมตามประเภทรถของแต่ละแถวข้อมูล
+def get_dynamic_depreciation(vehicle_type):
+  v_type = str(vehicle_type).upper()
+  if "4W" in v_type:
+    return depreciation_4w
+  elif "6W" in v_type:
+    return depreciation_6w
+  elif "10W" in v_type:
+    return depreciation_10w
+  return 500.0
+
+
+# นำไปคำนวณทับค่าเสื่อมในตารางข้อมูล (DataFrame)
+df["Maintenance_Allocated_THB_Per_Trip"] = df["Vehicle_Type"].apply(
+    get_dynamic_depreciation
+)
 
     calc_df = df.copy()
 
