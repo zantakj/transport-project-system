@@ -25,62 +25,83 @@ if df.empty:
   )
 else:
   st.markdown(
-      "#### 📍การวิเคราะห์รายได้และกำไรแยกตามเส้นทางขนส่ง (Route Code)"
+      "#### 📍 การวิเคราะห์รายได้และกำไรแยกตามเส้นทางขนส่ง (Route Code)"
   )
 
-  # ตรวจสอบคอลัมน์ที่จำเป็นสำหรับการคำนวณ
   if "Route_Code" in df.columns:
-    route_df = (
-        df.groupby("Route_Code")
-        .agg(
-            Trips=("Trip_ID", "count"),
-            Total_Distance=("Distance_km", "sum"),
-            Total_Revenue=("Revenue_THB", "sum"),
-            Total_Cost=(
-                "Total_Recorded_Cost_THB"
-                if "Total_Recorded_Cost_THB" in df.columns
-                else "Fuel_Cost_THB"
-            ),
-        )
-        .reset_index()
-    )
+    # เลือกใช้คอลัมน์ที่มีอยู่จริงเพื่อป้องกัน Error
+    rev_col = "Revenue_THB" if "Revenue_THB" in df.columns else "Agreed_Price_THB"
+    dist_col = "Distance_km" if "Distance_km" in df.columns else None
+    trip_id_col = "Trip_ID" if "Trip_ID" in df.columns else df.columns[0]
 
+    agg_dict = {trip_id_col: "count"}
+    if dist_col:
+      agg_dict[dist_col] = "sum"
+    if rev_col in df.columns:
+      agg_dict[rev_col] = "sum"
+    if "Fuel_Cost_THB" in df.columns:
+      agg_dict["Fuel_Cost_THB"] = "sum"
+
+    route_df = df.groupby("Route_Code").agg(agg_dict).reset_index()
+
+    # ปรับชื่อคอลัมน์ให้เป็นมาตรฐาน
+    rename_cols = {trip_id_col: "Trips"}
+    if dist_col:
+      rename_cols[dist_col] = "Total_Distance"
+    if rev_col in df.columns:
+      rename_cols[rev_col] = "Total_Revenue"
+    if "Fuel_Cost_THB" in df.columns:
+      rename_cols["Fuel_Cost_THB"] = "Total_Fuel_Cost"
+    route_df = route_df.rename(columns=rename_cols)
+
+    # คำนวณกำไรสุทธิ
     if "Profit_THB" in df.columns:
       route_profit = (
           df.groupby("Route_Code")["Profit_THB"].sum().reset_index()
       )
       route_df["Net_Profit"] = route_profit["Profit_THB"]
     else:
-      route_df["Net_Profit"] = (
-          route_df["Total_Revenue"] - route_df["Total_Cost"]
+      rev_val = (
+          route_df["Total_Revenue"] if "Total_Revenue" in route_df.columns else 0
       )
+      cost_val = (
+          route_df["Total_Fuel_Cost"]
+          if "Total_Fuel_Cost" in route_df.columns
+          else 0
+      )
+      route_df["Net_Profit"] = rev_val - cost_val
 
-    route_df = route_df.sort_values(by="Total_Revenue", ascending=False)
+    sort_col = (
+        "Total_Revenue" if "Total_Revenue" in route_df.columns else "Trips"
+    )
+    route_df = route_df.sort_values(by=sort_col, ascending=False)
 
     st.dataframe(route_df, use_container_width=True, hide_index=True)
 
     col1, col2 = st.columns(2)
     with col1:
-      fig_rev = px.bar(
-          route_df.head(10),
-          x="Route_Code",
-          y="Total_Revenue",
-          title="Top 10 เส้นทางที่สร้างรายได้สูงสุด (บาท)",
-          template="plotly_dark",
-          color="Total_Revenue",
-      )
-      st.plotly_chart(fig_rev, use_container_width=True)
+      if "Total_Revenue" in route_df.columns:
+        fig_rev = px.bar(
+            route_df.head(10),
+            x="Route_Code",
+            y="Total_Revenue",
+            title="Top 10 เส้นทางที่สร้างรายได้สูงสุด (บาท)",
+            template="plotly_dark",
+            color="Total_Revenue",
+        )
+        st.plotly_chart(fig_rev, use_container_width=True)
     with col2:
-      fig_profit = px.bar(
-          route_df.head(10),
-          x="Route_Code",
-          y="Net_Profit",
-          title="Top 10 เส้นทางที่มีกำไรสุทธิสูงสุด (บาท)",
-          template="plotly_dark",
-          color="Net_Profit",
-          color_continuous_scale="Greens",
-      )
-      st.plotly_chart(fig_profit, use_container_width=True)
+      if "Net_Profit" in route_df.columns:
+        fig_profit = px.bar(
+            route_df.head(10),
+            x="Route_Code",
+            y="Net_Profit",
+            title="Top 10 เส้นทางที่มีกำไรสุทธิสูงสุด (บาท)",
+            template="plotly_dark",
+            color="Net_Profit",
+            color_continuous_scale="Greens",
+        )
+        st.plotly_chart(fig_profit, use_container_width=True)
   else:
     st.error(
         "❌ ไม่พบคอลัมน์ 'Route_Code' ในชุดข้อมูล กรุณาตรวจสอบไฟล์ Excel อีกครั้ง"
