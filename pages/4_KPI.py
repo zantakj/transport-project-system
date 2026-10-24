@@ -74,8 +74,8 @@ else:
       axis=1,
   )
 
-  # --- KPI Summary Metrics ---
-  st.subheader("📊 สรุปผลการคำนวณต้นทุนและกำไร (ภาพรวม)")
+  # --- KPI Summary Metrics (ภาพรวมทั้งหมด) ---
+  st.subheader("📊 สรุปผลการคำนวณต้นทุนและกำไร (ภาพรวมทั้งหมด)")
 
   total_revenue = calc_df["Revenue_THB"].sum()
   total_cost = calc_df["Total_Recorded_Cost_THB"].sum()
@@ -91,15 +91,40 @@ else:
   c1.metric("รายได้รวม", f"฿{total_revenue:,.2f}")
   c2.metric("ต้นทุนรวมทั้งหมด", f"฿{total_cost:,.2f}")
   c3.metric(
-      "ค่าเสื่อมสภาพรวม (ทุกคัน)",
+      "ค่าเสื่อมสภาพรวม",
       f"฿{total_depreciation:,.2f}",
-      delta="แยกตาม 4W/6W/10W",
+      delta="รวมทุกประเภท",
   )
   c4.metric(
-      "กำไรสุทธิสุทธิ",
+      "กำไรสุทธิ",
       f"฿{total_profit:,.2f}",
       delta=f"Margin {avg_margin:.1f}%",
   )
+
+  st.markdown("---")
+
+  # --- แยกแสดงภาพรวมรายประเภทรถ (4W, 6W, 10W) ---
+  st.subheader("🚛 แยกภาพรวมตามประเภทรถ (4W, 6W, 10W)")
+
+  vehicle_types = sorted(calc_df["Vehicle_Type"].dropna().unique())
+  v_cols = st.columns(len(vehicle_types) if len(vehicle_types) > 0 else 3)
+
+  for i, v_type in enumerate(vehicle_types):
+    v_subset = calc_df[calc_df["Vehicle_Type"] == v_type]
+    v_rev = v_subset["Revenue_THB"].sum()
+    v_cost = v_subset["Total_Recorded_Cost_THB"].sum()
+    v_dep = v_subset["Maintenance_Allocated_THB_Per_Trip"].sum()
+    v_profit = v_subset["Profit_THB"].sum()
+    v_margin = (v_profit / v_rev * 100) if v_rev > 0 else 0
+    v_trips = len(v_subset)
+
+    with v_cols[i % len(v_cols)]:
+      st.markdown(f"### 🚚 รถประเภท: **{v_type}**")
+      st.metric("จำนวนเที่ยว", f"{v_trips:,} เที่ยว")
+      st.metric("รายได้", f"฿{v_rev:,.2f}")
+      st.metric("ต้นทุนรวม", f"฿{v_cost:,.2f}")
+      st.metric("ค่าเสื่อมสภาพ", f"฿{v_dep:,.2f}")
+      st.metric("กำไรสุทธิ", f"฿{v_profit:,.2f}", delta=f"Margin {v_margin:.1f}%")
 
   st.markdown("---")
 
