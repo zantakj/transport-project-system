@@ -1,6 +1,10 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
+import db  # เรียกใช้ไฟล์ db.py ที่เราสร้างขึ้นใหม่
+
+# ดึงข้อมูลมาแสดงผล
+df = db.load_data_from_db()
 
 # 🚨 ดักสิทธิ์เข้าถึงชั้นที่ 2
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
