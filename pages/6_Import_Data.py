@@ -55,13 +55,8 @@ if uploaded_file is not None:
 
                 if st.button("💾 ยืนยันบันทึกข้อมูลที่เลือกลงฐานข้อมูล", type="primary", use_container_width=True):
                     conn = sqlite3.connect('transport.db')
-                    cursor = conn.cursor()
                     
-                    # ล้างข้อมูลเก่า
-                    cursor.execute("DELETE FROM shipments")
-                    conn.commit()
-                    
-                    # บันทึกข้อมูลเฉพาะคอลัมน์ที่เลือก
+                    # บันทึกข้อมูลและสร้างตารางให้อัตโนมัติ ป้องกัน Error no such table
                     filtered_df.to_sql('shipments', conn, if_exists='replace', index=False)
                     conn.close()
                     
