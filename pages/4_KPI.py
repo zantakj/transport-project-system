@@ -123,32 +123,6 @@ else:
 
   st.markdown("---")
 
-  # --- แยกแสดงภาพรวมรายประเภทรถ (แสดงเฉพาะตอนเลือก "ทั้งหมด") ---
-  if selected_v_filter == "ทั้งหมด":
-    st.subheader("🚛 แยกภาพรวมตามประเภทรถ (4W, 6W, 10W)")
-    vehicle_types = sorted(calc_df["Vehicle_Type"].dropna().unique())
-    v_cols = st.columns(len(vehicle_types) if len(vehicle_types) > 0 else 3)
-
-    for i, v_type in enumerate(vehicle_types):
-      v_subset = calc_df[calc_df["Vehicle_Type"] == v_type]
-      v_rev = v_subset["Revenue_THB"].sum()
-      v_cost = v_subset["Total_Recorded_Cost_THB"].sum()
-      v_dep = v_subset["Maintenance_Allocated_THB_Per_Trip"].sum()
-      v_profit = v_subset["Profit_THB"].sum()
-      v_margin = (v_profit / v_rev * 100) if v_rev > 0 else 0
-      v_trips = len(v_subset)
-
-      with v_cols[i % len(v_cols)]:
-        st.markdown(f"### 🚚 รถประเภท: **{v_type}**")
-        st.metric("จำนวนเที่ยว", f"{v_trips:,} เที่ยว")
-        st.metric("รายได้", f"฿{v_rev:,.2f}")
-        st.metric("ต้นทุนรวม", f"฿{v_cost:,.2f}")
-        st.metric("ค่าเสื่อมสภาพ", f"฿{v_dep:,.2f}")
-        st.metric(
-            "กำไรสุทธิ", f"฿{v_profit:,.2f}", delta=f"Margin {v_margin:.1f}%"
-        )
-    st.markdown("---")
-
   # --- Charts ---
   col_l, col_r = st.columns(2)
 
