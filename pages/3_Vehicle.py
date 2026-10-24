@@ -6,6 +6,22 @@ import db  # เรียกใช้ไฟล์ db.py ที่เราสร
 
 # ดึงข้อมูลมาแสดงผล
 df = db.load_data_from_db()
+import database as db
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(layout="wide")
+
+# ดึงข้อมูลจากฐานข้อมูลกลางมาใช้
+df = db.load_data_from_db()
+
+if df.empty:
+  st.warning(
+      "ยังไม่มีข้อมูลในระบบ กรุณาไปที่หน้า 'นำเข้าข้อมูล (Import Data)' ก่อนครับ"
+  )
+else:
+  st.title("📊 รายละเอียดข้อมูลในระบบ")
+  st.dataframe(df, use_container_width=True)
 
 # 🚨 ดักสิทธิ์เข้าถึงชั้นที่ 2
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
