@@ -1,3 +1,4 @@
+import os
 import database as db
 import streamlit as st
 
@@ -7,6 +8,17 @@ st.set_page_config(
 
 st.title("📥 นำเข้าข้อมูลการขนส่ง (Import Data)")
 st.markdown("อัปโหลดไฟล์ Excel ของคุณเพื่อประมวลผลและบันทึกลงฐานข้อมูลกลาง")
+
+# ปุ่มล้างข้อมูลเก่าทิ้ง
+if st.st.button if hasattr(st, "st") else st.button("🗑️ ล้างข้อมูลเก่าในระบบทิ้งทั้งหมด"):
+  if os.path.exists("transport.db"):
+    os.remove("transport.db")
+    st.success("✅ ล้างฐานข้อมูลเดิมเรียบร้อยแล้ว!")
+    st.rerun()
+  else:
+    st.info("ℹ️ ไม่มีข้อมูลในระบบอยู่แล้ว")
+
+st.markdown("---")
 
 uploaded_file = st.file_uploader("เลือกไฟล์ Excel (.xlsx)", type=["xlsx"])
 
@@ -22,10 +34,6 @@ if uploaded_file is not None:
         " รายการ)"
     )
     st.balloons()
-    st.info(
-        "💡 ตอนนี้คุณสามารถคลิกเปลี่ยนไปดูหน้า 'KPI & Cost Analytics'"
-        " หรือหน้าอื่นๆ ได้เลยครับ ข้อมูลจะแสดงขึ้นมาแล้ว"
-    )
 
   except Exception as e:
     st.error(f"❌ เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
