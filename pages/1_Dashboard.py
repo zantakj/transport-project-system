@@ -40,7 +40,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# โหลดข้อมูลจากฐานข้อมูลกลาง database.py
 raw_df = db.load_data_from_db()
 
 if raw_df.empty:
@@ -240,28 +239,3 @@ else:
           plot_bgcolor="rgba(0,0,0,0)",
       )
       st.plotly_chart(fig_pie, use_container_width=True)
-
-  col_b1, col_b2 = st.columns(2)
-
-  with col_b1:
-    st.markdown(
-        "<h4 style='color:#F8FAFC;'>📍 Top 10 เส้นทางที่มีเที่ยววิ่งมากที่สุด</h4>",
-        unsafe_allow_html=True,
-    )
-    if "Route_Code" in df.columns and not df.empty:
-      top_routes = df["Route_Code"].value_counts().head(10).reset_index()
-      top_routes.columns = ["Route_Code", "Trips"]
-      fig_route = px.bar(
-          top_routes,
-          x="Trips",
-          y="Route_Code",
-          orientation="h",
-          template="plotly_dark",
-          color="Trips",
-          color_continuous_scale="Blues",
-          text="Trips",
-      )
-      fig_route.update_layout(
-          yaxis=dict(autorange="reversed"),
-          height=300,
-          margin=dict(t=10, b=10, l
