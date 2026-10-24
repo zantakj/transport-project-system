@@ -32,7 +32,7 @@ def process_and_save_excel(file_path):
       get_fixed_depreciation
   )
 
-  # 3. คำนวณต้นทุนผันแปร (รวม Tollway แล้ว)
+  # 3. คำนวณต้นทุนผันแปร
   df["Variable_Cost_THB"] = (
       df["Fuel_Cost_THB"].fillna(0)
       + df["Driver_Allowance_THB"].fillna(0)
@@ -66,7 +66,7 @@ def process_and_save_excel(file_path):
       axis=1,
   )
 
-  # 7. จัดเรียงลำดับคอลัมน์เวลาให้อยู่ชิดกันตามที่ต้องการ
+  # 7. จัดเรียงลำดับคอลัมน์เวลาให้อยู่ชิดกัน
   time_cols = [
       "Departure_Time",
       "Actual_Delivery",
