@@ -21,12 +21,12 @@ if df.empty:
       " เพื่ออัปโหลดไฟล์ Excel ก่อนครับ"
   )
 else:
-  # --- Sidebar: สำหรับปรับแต่งค่าเสื่อมและตัวกรอง ---
-  st.sidebar.header("🛠️ ตั้งค่าค่าเสื่อมสภาพ (Depreciation)")
+  # --- Sidebar: สำหรับปรับแต่งค่าเสื่อมและตัวกรองประเภทรถ ---
+  st.sidebar.header("🛠️ ตั้งค่าและการกรองข้อมูล")
+
   st.sidebar.markdown(
       "กำหนดค่าบำรุงรักษา/ค่าเสื่อมสภาพเหมาจ่ายต่อเที่ยว แยกตามประเภทรถ:"
   )
-
   depreciation_4w = st.sidebar.number_input(
       "รถ 4W (บาท/เที่ยว)", value=250.0, step=50.0
   )
@@ -36,6 +36,20 @@ else:
   depreciation_10w = st.sidebar.number_input(
       "รถ 10W (บาท/เที่ยว)", value=800.0, step=50.0
   )
+
+  st.sidebar.markdown("---")
+  st.sidebar.markdown("🎯 **ตัวกรองการแสดงผล**")
+
+  # สร้างตัวเลือกประเภทรถจากข้อมูลที่มีอยู่
+  if "Vehicle_Type" in df.columns:
+    v_types_list = ["ทั้งหมด"] + sorted(
+        list(df["Vehicle_Type"].dropna().unique())
+    )
+    selected_v_filter = st.sidebar.selectbox(
+        "เลือกประเภทรถที่ต้องการแสดงผล:", v_types_list
+    )
+  else:
+    selected_v_filter = "ทั้งหมด"
 
 
   # ฟังก์ชันคำนวณค่าเสื่อมตามประเภทรถจริง
@@ -50,13 +64,12 @@ else:
     return 500.0
 
 
-  # อัปเดตค่าเสื่อมในข้อมูล
+  # อัปเดตค่าเสื่อมในข้อมูลทั้งหมด
   calc_df = df.copy()
   calc_df["Maintenance_Allocated_THB_Per_Trip"] = calc_df[
       "Vehicle_Type"
   ].apply(get_dynamic_depreciation)
 
-  # คำนวณต้นทุนรวมและกำไรใหม่ตามค่าเสื่อมที่ปรับ
   calc_df["Allocated_Cost_THB"] = (
       calc_df["Maintenance_Allocated_THB_Per_Trip"].fillna(0)
       + calc_df["Insurance_Allocated_THB"].fillna(0)
@@ -74,15 +87,22 @@ else:
       axis=1,
   )
 
-  # --- KPI Summary Metrics (ภาพรวมทั้งหมด) ---
-  st.subheader("📊 สรุปผลการคำนวณต้นทุนและกำไร (ภาพรวมทั้งหมด)")
+  # กรองข้อมูลตามที่ผู้ใช้เลือกใน Sidebar
+  if selected_v_filter != "ทั้งหมด":
+    display_df = calc_df[calc_df["Vehicle_Type"] == selected_v_filter]
+    st.info(f"📌 กำลังแสดงผลข้อมูลเฉพาะประเภทรถ: **{selected_v_filter}**")
+  else:
+    display_df = calc_df
 
-  total_revenue = calc_df["Revenue_THB"].sum()
-  total_cost = calc_df["Total_Recorded_Cost_THB"].sum()
-  total_depreciation = calc_df[
+  # --- KPI Summary Metrics ---
+  st.subheader(f"📊 สรุปผลการคำนวณต้นทุนและกำไร ({selected_v_filter})")
+
+  total_revenue = display_df["Revenue_THB"].sum()
+  total_cost = display_df["Total_Recorded_Cost_THB"].sum()
+  total_depreciation = display_df[
       "Maintenance_Allocated_THB_Per_Trip"
   ].sum()
-  total_profit = calc_df["Profit_THB"].sum()
+  total_profit = display_df["Profit_THB"].sum()
   avg_margin = (
       (total_profit / total_revenue * 100) if total_revenue > 0 else 0
   )
@@ -93,51 +113,55 @@ else:
   c3.metric(
       "ค่าเสื่อมสภาพรวม",
       f"฿{total_depreciation:,.2f}",
-      delta="รวมทุกประเภท",
+      delta="ตามเงื่อนไขที่เลือก",
   )
   c4.metric(
-      "กำไรสุทธิ",
+      "กำไรสุทธิรวม",
       f"฿{total_profit:,.2f}",
       delta=f"Margin {avg_margin:.1f}%",
   )
 
   st.markdown("---")
 
-  # --- แยกแสดงภาพรวมรายประเภทรถ (4W, 6W, 10W) ---
-  st.subheader("🚛 แยกภาพรวมตามประเภทรถ (4W, 6W, 10W)")
+  # --- แยกแสดงภาพรวมรายประเภทรถ (แสดงเฉพาะตอนเลือก "ทั้งหมด") ---
+  if selected_v_filter == "ทั้งหมด":
+    st.subheader("🚛 แยกภาพรวมตามประเภทรถ (4W, 6W, 10W)")
+    vehicle_types = sorted(calc_df["Vehicle_Type"].dropna().unique())
+    v_cols = st.columns(len(vehicle_types) if len(vehicle_types) > 0 else 3)
 
-  vehicle_types = sorted(calc_df["Vehicle_Type"].dropna().unique())
-  v_cols = st.columns(len(vehicle_types) if len(vehicle_types) > 0 else 3)
+    for i, v_type in enumerate(vehicle_types):
+      v_subset = calc_df[calc_df["Vehicle_Type"] == v_type]
+      v_rev = v_subset["Revenue_THB"].sum()
+      v_cost = v_subset["Total_Recorded_Cost_THB"].sum()
+      v_dep = v_subset["Maintenance_Allocated_THB_Per_Trip"].sum()
+      v_profit = v_subset["Profit_THB"].sum()
+      v_margin = (v_profit / v_rev * 100) if v_rev > 0 else 0
+      v_trips = len(v_subset)
 
-  for i, v_type in enumerate(vehicle_types):
-    v_subset = calc_df[calc_df["Vehicle_Type"] == v_type]
-    v_rev = v_subset["Revenue_THB"].sum()
-    v_cost = v_subset["Total_Recorded_Cost_THB"].sum()
-    v_dep = v_subset["Maintenance_Allocated_THB_Per_Trip"].sum()
-    v_profit = v_subset["Profit_THB"].sum()
-    v_margin = (v_profit / v_rev * 100) if v_rev > 0 else 0
-    v_trips = len(v_subset)
-
-    with v_cols[i % len(v_cols)]:
-      st.markdown(f"### 🚚 รถประเภท: **{v_type}**")
-      st.metric("จำนวนเที่ยว", f"{v_trips:,} เที่ยว")
-      st.metric("รายได้", f"฿{v_rev:,.2f}")
-      st.metric("ต้นทุนรวม", f"฿{v_cost:,.2f}")
-      st.metric("ค่าเสื่อมสภาพ", f"฿{v_dep:,.2f}")
-      st.metric("กำไรสุทธิ", f"฿{v_profit:,.2f}", delta=f"Margin {v_margin:.1f}%")
-
-  st.markdown("---")
+      with v_cols[i % len(v_cols)]:
+        st.markdown(f"### 🚚 รถประเภท: **{v_type}**")
+        st.metric("จำนวนเที่ยว", f"{v_trips:,} เที่ยว")
+        st.metric("รายได้", f"฿{v_rev:,.2f}")
+        st.metric("ต้นทุนรวม", f"฿{v_cost:,.2f}")
+        st.metric("ค่าเสื่อมสภาพ", f"฿{v_dep:,.2f}")
+        st.metric(
+            "กำไรสุทธิ", f"฿{v_profit:,.2f}", delta=f"Margin {v_margin:.1f}%"
+        )
+    st.markdown("---")
 
   # --- Charts ---
   col_l, col_r = st.columns(2)
 
   with col_l:
-    fig_bar = px.bar(
-        calc_df.groupby("Vehicle_Type")[
+    chart_data = (
+        display_df.groupby("Vehicle_Type")[
             ["Revenue_THB", "Total_Recorded_Cost_THB", "Profit_THB"]
         ]
         .sum()
-        .reset_index(),
+        .reset_index()
+    )
+    fig_bar = px.bar(
+        chart_data,
         x="Vehicle_Type",
         y=["Revenue_THB", "Total_Recorded_Cost_THB", "Profit_THB"],
         barmode="group",
@@ -148,7 +172,9 @@ else:
 
   with col_r:
     dep_summary = (
-        calc_df.groupby("Vehicle_Type")["Maintenance_Allocated_THB_Per_Trip"]
+        display_df.groupby("Vehicle_Type")[
+            "Maintenance_Allocated_THB_Per_Trip"
+        ]
         .sum()
         .reset_index()
     )
@@ -164,7 +190,7 @@ else:
   # --- Data Table ---
   st.subheader("📋 ตารางรายละเอียดคำนวณรายเที่ยววิ่ง")
   st.dataframe(
-      calc_df[[
+      display_df[[
           "Trip_ID",
           "Trip_Date",
           "Vehicle_Type",
