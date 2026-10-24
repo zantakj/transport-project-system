@@ -1,76 +1,47 @@
-import sqlite3
-import pandas as pd
+import database as db
 import streamlit as st
-import db  # เรียกใช้ไฟล์ db.py ที่เราสร้างขึ้นใหม่
 
-# ดึงข้อมูลมาแสดงผล
-df = db.load_data_from_db()
-
-# 🚨 ระบบป้องกันขั้นที่ 2
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    st.error("⛔ กรุณาเข้าสู่ระบบก่อนใช้งานหน้านี้")
-    st.stop()
-
-st.set_page_config(page_title="Import Data", page_icon="📥", layout="wide")
+st.set_page_config(
+    page_title="นำเข้าข้อมูล (Import Data)", page_icon="📥", layout="wide"
+)
 
 st.title("📥 นำเข้าข้อมูลการขนส่ง (Import Data)")
-st.caption("อัปโหลดไฟล์ Excel เลือก Sheet และเลือกเฉพาะหัวข้อ/คอลัมน์ที่ต้องการนำเข้าลงฐานข้อมูล")
+st.markdown("อัปโหลดไฟล์ Excel ของคุณเพื่อประมวลผลและบันทึกลงฐานข้อมูลกลาง")
 
-uploaded_file = st.file_uploader("เลือกไฟล์ Excel ข้อมูลการขนส่ง", type=["xlsx", "xls"])
+# ช่องสำหรับอัปโหลดไฟล์ Excel
+uploaded_file = st.file_uploader("เลือกไฟล์ Excel (.xlsx)", type=["xlsx"])
 
 if uploaded_file is not None:
-    try:
-        # 1. โหลดรายชื่อ Sheet ทั้งหมดในไฟล์ Excel
-        excel_file = pd.ExcelFile(uploaded_file)
-        sheet_names = excel_file.sheet_names
-        
-        st.divider()
-        col_sheet, col_header = st.columns([1, 1])
-        
-        with col_sheet:
-            selected_sheet = st.selectbox("📌 เลือก Sheet ที่ต้องการดึงข้อมูล:", sheet_names)
-            
-        with col_header:
-            header_row = st.number_input("📌 บรรทัดที่เป็นหัวข้อคอลัมน์ (Header Row Index):", min_value=0, value=0, help="หากแถวแรกๆ เป็นคำอธิบาย ให้ปรับเป็นบรรทัดหัวข้อจริง")
+  try:
+    # บันทึกไฟล์ชั่วคราวเพื่อส่งให้ database.py ประมวลผล
+    with open("temp_upload.xlsx", "wb") as f:
+      f.write(uploaded_file.getbuffer())
 
-        # อ่านข้อมูลตาม Sheet และ Header ที่เลือก
-        raw_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=header_row)
-        
-        # ทำความสะอาดชื่อคอลัมน์
-        raw_df.columns = [str(col).strip() for col in raw_df.columns]
+    # เรียกใช้ฟังก์ชันประมวลผลและบันทึกลง SQLite
+    rows_imported = db.process_and_save_excel("temp_upload.xlsx")
 
-        if not raw_df.empty:
-            st.markdown("---")
-            st.subheader("🎯 เลือกหัวข้อ/คอลัมน์ที่ต้องการใช้")
-            
-            all_columns = list(raw_df.columns)
-            selected_columns = st.multiselect(
-                "เลือกคอลัมน์ที่จะนำเข้าลงระบบ (สามารถลบ/เพิ่มได้ตามต้องการ):",
-                options=all_columns,
-                default=all_columns
-            )
+    st.success(
+        f"✅ นำเข้าข้อมูลและบันทึกลงฐานข้อมูลสำเร็จ! (จำนวน {rows_imported:,}"
+        " รายการ)"
+    )
+    st.balloons()
 
-            if selected_columns:
-                # กรองเฉพาะคอลัมน์ที่เลือก
-                filtered_df = raw_df[selected_columns].dropna(how='all')
+    st.info(
+        "💡 ตอนนี้คุณสามารถคลิกเปลี่ยนไปดูหน้าที่เมนู 'KPI & Cost Analytics'"
+        " หรือหน้า 'Dashboard' ได้เลยครับ ข้อมูลจะแสดงขึ้นมาทันที"
+    )
 
-                st.markdown(f"#### 📋 พรีวิวข้อมูลที่จะนำเข้า ({len(filtered_df):,} รายการ):")
-                st.dataframe(filtered_df.head(10), use_container_width=True)
+  except Exception as e:
+    st.error(f"❌ เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
+else:
+  st.warning("⚠️ กรุณาอัปโหลดไฟล์ Excel เพื่อเริ่มต้นใช้งานระบบ")
 
-                if st.button("💾 ยืนยันบันทึกข้อมูลที่เลือกลงฐานข้อมูล", type="primary", use_container_width=True):
-                    conn = sqlite3.connect('transport.db')
-                    
-                    # บันทึกข้อมูลและสร้างตารางให้อัตโนมัติ ป้องกัน Error no such table
-                    filtered_df.to_sql('shipments', conn, if_exists='replace', index=False)
-                    conn.close()
-                    
-                    # เคลียร์ Cache ของ Streamlit
-                    st.cache_data.clear()
-                    
-                    st.balloons()
-                    st.success("🎉 บันทึกข้อมูลที่เลือกเข้าสู่ระบบเรียบร้อยแล้ว! สามารถสลับไปหน้า Dashboard เพื่อดูผลวิเคราะห์ได้เลยครับ")
-            else:
-                st.warning("⚠️ กรุณาเลือกอย่างน้อย 1 คอลัมน์เพื่อนำเข้าข้อมูล")
-
-    except Exception as e:
-        st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+  # แสดงข้อมูลตัวอย่างโครงสร้างไฟล์ที่รองรับ
+  with st.expander("📌 ดูโครงสร้างคอลัมน์ Excel ที่จำเป็นต้องมี"):
+    st.markdown("""
+        ไฟล์ Excel ของคุณควรมีชีทชื่อ **Trips** และมีคอลัมน์หลัก ๆ ดังนี้:
+        - `Trip_ID`, `Trip_Date`, `Vehicle_Type`, `Route_Code`
+        - `Departure_Time`, `Actual_Delivery`, `Scheduled_Delivery`, `Completion_Time`
+        - `Distance_km`, `Agreed_Price_THB` (Revenue)
+        - `Fuel_Cost_THB`, `Driver_Allowance_THB`, `Tollway_Cost_THB`, `Insurance_Allocated_THB`, `Other_Variable_Cost_THB`
+        """)
