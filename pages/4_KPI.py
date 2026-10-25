@@ -24,9 +24,7 @@ else:
   # --- Sidebar: สำหรับปรับแต่งค่าเสื่อม, ราคาน้ำมัน และตัวกรองประเภทรถ ---
   st.sidebar.header("🛠️ ตั้งค่าและการกรองข้อมูล")
 
-  st.sidebar.markdown(
-      "🛢️ **กำหนดราคาน้ำมันเชื้อเพลิง:**"
-  )
+  st.sidebar.markdown("🛢️ **กำหนดราคาน้ำมันเชื้อเพลิง:**")
   fuel_price_per_liter = st.sidebar.number_input(
       "ราคาน้ำมัน (บาท/ลิตร)", value=30.0, step=0.5
   )
@@ -74,11 +72,16 @@ else:
 
   # อัปเดตข้อมูลการคำนวณทั้งหมด
   calc_df = df.copy()
-  
-  # คำนวณค่าน้ำมันใหม่จากราคาน้ำมันที่ผู้ใช้กรอกคูณด้วยปริมาณลิตร (Fuel_Liters)
-  if "Fuel_Liters" in calc_df.columns:
-    calc_df["Fuel_Cost_THB"] = calc_df["Fuel_Liters"] * fuel_price_per_liter
 
+  # 1. คำนวณค่าน้ำมันใหม่จาก (ปริมาณลิตร * ราคาน้ำมันที่กรอก) ทันที
+  if "Fuel_Liters" in calc_df.columns:
+    calc_df["Calculated_Fuel_Cost_THB"] = (
+        calc_df["Fuel_Liters"] * fuel_price_per_liter
+    )
+  else:
+    calc_df["Calculated_Fuel_Cost_THB"] = 0.0
+
+  # 2. คำนวณค่าเสื่อมสภาพรายเที่ยว
   calc_df["Maintenance_Allocated_THB_Per_Trip"] = calc_df[
       "Vehicle_Type"
   ].apply(get_dynamic_depreciation)
@@ -87,11 +90,22 @@ else:
       calc_df["Maintenance_Allocated_THB_Per_Trip"].fillna(0)
       + calc_df["Insurance_Allocated_THB"].fillna(0)
   )
-  
-  # ต้นทุนรวม = ต้นทุนผันแปร (ซึ่งรวมค่าน้ำมันใหม่) + ค่าเสื่อม/ค่าใช้จ่ายจัดสรร
-  calc_df["Total_Recorded_Cost_THB"] = (
-      calc_df["Variable_Cost_THB"] + calc_df["Allocated_Cost_THB"]
+
+  # 3. ต้นทุนรวมทั้งหมด = ค่าน้ำมันใหม่ + ค่าใช้จ่ายจัดสรร (ค่าเสื่อม/ประกัน) + ต้นทุนผันแปรอื่นๆ (ถ้ามี)
+  other_variable_cost = (
+      calc_df["Variable_Cost_THB"] - calc_df["Fuel_Cost_THB"]
+      if "Fuel_Cost_THB" in calc_df.columns
+      else 0
   )
+  other_variable_cost = other_variable_cost.apply(lambda x: max(0, x))
+
+  calc_df["Total_Recorded_Cost_THB"] = (
+      calc_df["Calculated_Fuel_Cost_THB"]
+      + other_variable_cost
+      + calc_df["Allocated_Cost_THB"]
+  )
+
+  # 4. คำนวณกำไรใหม่
   calc_df["Profit_THB"] = (
       calc_df["Revenue_THB"] - calc_df["Total_Recorded_Cost_THB"]
   )
@@ -114,6 +128,7 @@ else:
 
   total_revenue = display_df["Revenue_THB"].sum()
   total_cost = display_df["Total_Recorded_Cost_THB"].sum()
+  total_fuel_cost_sum = display_df["Calculated_Fuel_Cost_THB"].sum()
   total_depreciation = display_df[
       "Maintenance_Allocated_THB_Per_Trip"
   ].sum()
@@ -124,7 +139,12 @@ else:
 
   c1, c2, c3, c4 = st.columns(4)
   c1.metric("รายได้รวม", f"฿{total_revenue:,.2f}")
-  c2.metric("ต้นทุนรวมทั้งหมด", f"฿{total_cost:,.2f}")
+  c2.metric(
+      "ต้นทุนรวมทั้งหมด",
+      f"฿{total_cost:,.2f}",
+      delta=f"ค่าน้ำมัน ฿{total_fuel_cost_sum:,.2f}",
+      delta_color="off",
+  )
   c3.metric(
       "ค่าเสื่อมสภาพรวม",
       f"฿{total_depreciation:,.2f}",
@@ -186,9 +206,8 @@ else:
           "Route_Code",
           "Distance_km",
           "Fuel_Liters",
-          "Fuel_Cost_THB",
+          "Calculated_Fuel_Cost_THB",
           "Revenue_THB",
-          "Variable_Cost_THB",
           "Maintenance_Allocated_THB_Per_Trip",
           "Total_Recorded_Cost_THB",
           "Profit_THB",
