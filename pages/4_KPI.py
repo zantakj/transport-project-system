@@ -21,11 +21,19 @@ if df.empty:
       " เพื่ออัปโหลดไฟล์ Excel ก่อนครับ"
   )
 else:
-  # --- Sidebar: สำหรับปรับแต่งค่าเสื่อมและตัวกรองประเภทรถ ---
+  # --- Sidebar: สำหรับปรับแต่งค่าเสื่อม, ราคาน้ำมัน และตัวกรองประเภทรถ ---
   st.sidebar.header("🛠️ ตั้งค่าและการกรองข้อมูล")
 
   st.sidebar.markdown(
-      "กำหนดค่าบำรุงรักษา/ค่าเสื่อมสภาพเหมาจ่ายต่อเที่ยว แยกตามประเภทรถ:"
+      "🛢️ **กำหนดราคาน้ำมันเชื้อเพลิง:**"
+  )
+  fuel_price_per_liter = st.sidebar.number_input(
+      "ราคาน้ำมัน (บาท/ลิตร)", value=30.0, step=0.5
+  )
+
+  st.sidebar.markdown("---")
+  st.sidebar.markdown(
+      "🚗 **กำหนดค่าบำรุงรักษา/ค่าเสื่อมสภาพเหมาจ่ายต่อเที่ยว:**"
   )
   depreciation_4w = st.sidebar.number_input(
       "รถ 4W (บาท/เที่ยว)", value=250.0, step=50.0
@@ -64,8 +72,13 @@ else:
     return 500.0
 
 
-  # อัปเดตค่าเสื่อมในข้อมูลทั้งหมด
+  # อัปเดตข้อมูลการคำนวณทั้งหมด
   calc_df = df.copy()
+  
+  # คำนวณค่าน้ำมันใหม่จากราคาน้ำมันที่ผู้ใช้กรอกคูณด้วยปริมาณลิตร (Fuel_Liters)
+  if "Fuel_Liters" in calc_df.columns:
+    calc_df["Fuel_Cost_THB"] = calc_df["Fuel_Liters"] * fuel_price_per_liter
+
   calc_df["Maintenance_Allocated_THB_Per_Trip"] = calc_df[
       "Vehicle_Type"
   ].apply(get_dynamic_depreciation)
@@ -74,6 +87,8 @@ else:
       calc_df["Maintenance_Allocated_THB_Per_Trip"].fillna(0)
       + calc_df["Insurance_Allocated_THB"].fillna(0)
   )
+  
+  # ต้นทุนรวม = ต้นทุนผันแปร (ซึ่งรวมค่าน้ำมันใหม่) + ค่าเสื่อม/ค่าใช้จ่ายจัดสรร
   calc_df["Total_Recorded_Cost_THB"] = (
       calc_df["Variable_Cost_THB"] + calc_df["Allocated_Cost_THB"]
   )
@@ -170,6 +185,8 @@ else:
           "Vehicle_Type",
           "Route_Code",
           "Distance_km",
+          "Fuel_Liters",
+          "Fuel_Cost_THB",
           "Revenue_THB",
           "Variable_Cost_THB",
           "Maintenance_Allocated_THB_Per_Trip",
