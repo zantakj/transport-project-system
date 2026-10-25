@@ -8,9 +8,7 @@ st.set_page_config(
 )
 
 st.title("📥 นำเข้าข้อมูลการขนส่ง (Import Data)")
-st.markdown(
-    "อัปโหลดไฟล์ Excel และเลือกชีตที่ต้องการเพื่อประมวลผลและบันทึกลงฐานข้อมูลกลาง"
-)
+st.markdown("อัปโหลดไฟล์ Excel เพื่อประมวลผลและบันทึกลงฐานข้อมูลกลาง")
 
 # ปุ่มล้างข้อมูลเก่าทิ้ง
 if st.button("🗑️ ล้างข้อมูลเก่าในระบบทิ้งทั้งหมด"):
@@ -27,47 +25,41 @@ uploaded_file = st.file_uploader("เลือกไฟล์ Excel (.xlsx)", ty
 
 if uploaded_file is not None:
   try:
-    # บันทึกไฟล์ที่อัปโหลด
-    file_bytes = uploaded_file.getvalue()
+    # บันทึกไฟล์ชั่วคราว
     with open("temp_upload.xlsx", "wb") as f:
-      f.write(file_bytes)
+      f.write(uploaded_file.getbuffer())
 
-    # อ่าน Sheet Names ออกมา
+    # โหลดรายชื่อชีตทั้งหมดมาให้ผู้ใช้เลือก (โดยไม่บังคับชื่อ)
     excel_file = pd.ExcelFile("temp_upload.xlsx", engine="openpyxl")
     sheet_names = excel_file.sheet_names
 
     st.markdown("### 📋 เลือก Sheet ที่ต้องการใช้งาน")
     selected_sheet = st.selectbox(
-        "ระบุชื่อชีต (Sheet) ในไฟล์ Excel:",
-        sheet_names,
-        index=0,
+        "เลือกชีตข้อมูลในไฟล์ Excel:", sheet_names, index=0
     )
 
-    # แสดงตัวอย่างข้อมูลใน Sheet ที่เลือกก่อนกดบันทึก
+    # แสดงตัวอย่างข้อมูลจากชีตที่เลือก
     df_preview = pd.read_excel(
         "temp_upload.xlsx", sheet_name=selected_sheet, engine="openpyxl"
     )
     st.markdown(f"**ตัวอย่างข้อมูลในชีต '{selected_sheet}' (5 รายการแรก):**")
     st.dataframe(df_preview.head(5), use_container_width=True)
 
-    if st.button("🚀 ยืนยันการนำเข้าข้อมูลจากชีตนี้"):
-      with st.spinner("กำลังประมวลผลและบันทึกข้อมูล..."):
-        # บันทึกชีตที่เลือกลงไฟล์ประมวลผลชั่วคราว
+    if st.button("🚀 ยืนยันการนำเข้าข้อมูล"):
+      with st.spinner("กำลังบันทึกข้อมูล..."):
+        # บันทึกชีตที่เลือกแปลงเป็นไฟล์กลางสำหรับประมวลผล
         df_preview.to_excel("temp_upload_processed.xlsx", index=False)
 
-        # ส่งไฟล์ไปบันทึกลงฐานข้อมูล
+        # ส่งเข้าฐานข้อมูลกลาง
         rows_imported = db.process_and_save_excel("temp_upload_processed.xlsx")
 
         st.success(
-            f"✅ นำเข้าข้อมูลจากชีต '{selected_sheet}' สำเร็จ! (จำนวน"
+            f"✅ นำเข้าข้อมูลสำเร็จ! จากชีต '{selected_sheet}' (จำนวน"
             f" {rows_imported:,} รายการ)"
         )
         st.balloons()
 
   except Exception as e:
-    st.error(
-        f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}\n\n💡"
-        " กรุณาตรวจสอบว่ามี 'openpyxl' ในไฟล์ requirements.txt หรือไม่"
-    )
+    st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 else:
   st.warning("⚠️ กรุณาอัปโหลดไฟล์ Excel เพื่อเริ่มต้นใช้งานระบบ")
