@@ -1,193 +1,168 @@
 """
-calculations.py — แกนการคำนวณของระบบ (ใช้ร่วมกันทุกหน้า)
+calculations.py — สูตรคำนวณของระบบ (ใช้ร่วมกันทุกหน้า)
 
-โครงสร้างต้นทุน (ต้องอธิบายทฤษฎีในเล่ม):
-  ต้นทุนผันแปร (Variable cost) ต่อเที่ยว
-    ค่าน้ำมัน      = ลิตร × ราคาน้ำมัน
-    ค่ายาง         = ระยะทาง × (จำนวนยาง × ราคายาง ÷ อายุยาง กม.)
-    ค่าน้ำมันเครื่อง = ระยะทาง × (ค่าเปลี่ยนต่อครั้ง ÷ ระยะเปลี่ยน กม.)
-    ค่าซ่อมบำรุง   = ระยะทาง × บาท/กม.
-    ค่าทางด่วน + เบี้ยเลี้ยงคนขับ (ตามที่บันทึกในเที่ยว)
-  ต้นทุนคงที่ (Fixed cost) ต่อคันต่อเดือน
-    ค่าเสื่อมราคาแบบเส้นตรง = (ราคาซื้อ − มูลค่าซาก) ÷ อายุใช้งาน ÷ 12
-    ประกัน/ภาษี = ต่อปี ÷ 12
-    เงินเดือนคนขับ (เฉพาะรถ Active)
-  การปันส่วน (Allocation)
-    ต้นทุนคงที่ของรถแต่ละคันในเดือนนั้น → กระจายให้เที่ยวของรถคันนั้นตามสัดส่วนระยะทาง
-    ต้นทุนคงที่ของรถที่ไม่มีเที่ยววิ่ง (รถจอด/สำรอง) = "ต้นทุนรถว่าง (Idle cost)"
-      → กระจายให้ทุกเที่ยวของรถประเภทเดียวกันในเดือนนั้นตามสัดส่วนระยะทาง
-  ผลคือ ผลรวมต้นทุนรายเที่ยว = ต้นทุนทั้งบริษัท (ไม่มีต้นทุนหายไป)
+1) การใช้น้ำมัน
+     ลิตร                 = ค่าน้ำมัน (บาท, จากไฟล์) ÷ ราคาน้ำมันของเดือนนั้น (บาท/ลิตร, ผู้ใช้กรอก)
+     อัตราสิ้นเปลือง (กม./ลิตร) = ระยะทาง ÷ ลิตร
+   หมายเหตุ: ในไฟล์บริษัท ค่าน้ำมัน = paid_distance × อัตราบาท/กม. ตามสัญญา (เช่น 4.18 บาท/กม. ใน มิ.ย.)
+   ดังนั้น กม./ลิตรที่ได้คือ "อัตราที่สัญญาใช้คิดเงิน" ไม่ใช่อัตราที่วัดจากการเติมน้ำมันจริง
+
+2) คาร์บอน (Fuel-based method, IPCC 2006 Vol.2 Ch.3 Mobile Combustion)
+     CO2e (กก.) = ลิตร × EF (kgCO2e/ลิตร)
+   ศักยภาพลดคาร์บอน (ไม่ใช่คาร์บอนเครดิตที่ได้รับรอง)
+     ระยะเกินแผน = max(actual_distance − planned_distance, 0)
+     CO2e ที่ลดได้ = ระยะเกินแผน ÷ กม./ลิตร × EF
+     มูลค่าประมาณการ = CO2e ที่ลดได้ (ตัน) × ราคาเครดิต T-VER
+
+3) ค่าเสื่อมราคา (วิธีเส้นตรง — ระบบคำนวณเอง)
+     ค่าเสื่อมต่อคันต่อเดือน = (ราคาทุน − มูลค่าซาก) ÷ (อายุใช้งาน × 12)
+     ค่าเสื่อมต่อคันต่อวัน   = ค่าเสื่อมต่อคันต่อเดือน ÷ จำนวนวันในเดือน
+     รถที่วิ่งในวันนั้น        = จำนวนคนขับ (Position = Driver) ที่ไม่ซ้ำกันในวันนั้น
+     ค่าเสื่อมรถที่วิ่ง          → คิดให้แถวคนขับ 1 คัน-วัน ต่อ 1 แถว
+     ต้นทุนรถว่าง             = (รถทั้งหมด − รถที่วิ่ง) × (ค่าเสื่อม + ประกัน) ต่อคันต่อวัน
+   นับรถเป็นรายวัน เพราะคนขับหมุนเวียน (มิ.ย. มีคนขับไม่ซ้ำ 221 คน แต่วิ่งพร้อมกันสูงสุด 169 คัน/วัน)
+
+4) กำไรสุทธิ
+     รายได้ (ค่าสมมติ)   = ค่าเที่ยว × จำนวนเที่ยว (เฉพาะแถวคนขับ)
+     − ค่าใช้จ่ายตาม E-Billing = ยอดรวมทั้งหมด (รวมค่ารถ ค่าน้ำมัน OT Incentive ฯลฯ และหักค่าปรับแล้ว)
+     − ค่าซ่อมบำรุง/ยาง  = ระยะทาง × บาท/กม.
+     − ค่าเสื่อมราคา และ ประกัน/ภาษีรถ (ของรถที่วิ่ง)
+     = กำไรสุทธิรายแถว ;  ระดับบริษัทหักต้นทุนรถว่างเพิ่ม
+   ค่าน้ำมันรวมอยู่ในยอดรวมทั้งหมดแล้ว จึงไม่หักซ้ำ
+   ถ้าพารามิเตอร์ใดยังไม่มีค่า ระบบจะไม่หักรายการนั้นและแสดงรายชื่อรายการที่ "ยังไม่ได้หัก" กำกับเสมอ
 """
+import calendar
+
 import numpy as np
 import pandas as pd
 
-TIME_COLS = ["Departure_Time", "Scheduled_Delivery", "Actual_Delivery", "Completion_Time"]
+COST_ITEMS = {  # คอลัมน์ต้นทุน → (ชื่อ, พารามิเตอร์ที่ต้องมี)
+    "Payment_THB": ("ค่าใช้จ่ายตาม E-Billing", None),
+    "Maintenance_THB": ("ค่าซ่อมบำรุง/ยาง", "maintenance_km"),
+    "Depreciation_THB": ("ค่าเสื่อมราคา", "vehicle_price"),
+    "Insurance_THB": ("ประกัน/ภาษีรถ", "insurance_year"),
+}
 
 
-def _months_in_data(trips):
-  periods = trips["Trip_Date"].dt.to_period("M")
-  return pd.period_range(periods.min(), periods.max(), freq="M")
+def _nz(x):
+  return 0.0 if x is None else x
 
 
-def monthly_fixed_costs(vehicles, cost_params, months):
-  """ต้นทุนคงที่ของรถ "ทุกคัน" ในแต่ละเดือน (รวมรถที่จอดไว้)"""
-  v = vehicles.merge(cost_params, on="Vehicle_Type", how="left")
-  v["Purchase_Date"] = pd.to_datetime(v["Purchase_Date"], errors="coerce")
-  rows = []
-  for m in months:
-    month_start = m.start_time
-    for _, r in v.iterrows():
-      if pd.notna(r.Purchase_Date) and r.Purchase_Date > m.end_time:
-        continue  # ยังไม่ได้ซื้อรถ
-      life_months = r.Useful_Life_Years * 12
-      age_months = (
-          (month_start.year - r.Purchase_Date.year) * 12
-          + month_start.month - r.Purchase_Date.month
-          if pd.notna(r.Purchase_Date) else 0
-      )
-      dep = (
-          (r.Purchase_Price_THB - r.Salvage_Value_THB) / life_months
-          if age_months < life_months else 0.0  # หมดอายุ → ไม่มีค่าเสื่อมแล้ว
-      )
-      rows.append(dict(
-          Year_Month=str(m), Vehicle_Code=r.Vehicle_Code,
-          Vehicle_Type=r.Vehicle_Type, Status=r.Status,
-          Depreciation_THB=dep,
-          Insurance_THB=r.Insurance_Tax_THB_per_Year / 12,
-          Driver_Salary_THB=(
-              r.Driver_Salary_THB_per_Month if r.Status == "Active" else 0.0
-          ),
-      ))
-  out = pd.DataFrame(rows)
-  out["Fixed_Cost_THB"] = out[["Depreciation_THB", "Insurance_THB", "Driver_Salary_THB"]].sum(axis=1)
-  return out
+def depreciation_per_month(p):
+  if p.get("vehicle_price") is None or not p.get("useful_life"):
+    return None
+  return (p["vehicle_price"] - _nz(p.get("salvage_value"))) / (p["useful_life"] * 12)
 
 
-def build_trip_costs(tables):
-  """คืน (trips_ที่คำนวณแล้ว, ต้นทุนคงที่รายคันรายเดือน)"""
-  t = tables["Trips"].copy()
-  vehicles, routes = tables["Vehicles"], tables["Routes"]
-  cp, ef = tables["Cost_Parameters"], tables["Emission_Factors"]
+def missing_deductions(p):
+  """รายการต้นทุนที่ยังหักไม่ได้เพราะยังไม่มีพารามิเตอร์"""
+  return [name for col, (name, key) in COST_ITEMS.items() if key and p.get(key) is None]
 
-  t["Trip_Date"] = pd.to_datetime(t["Trip_Date"], errors="coerce")
-  t["Year_Month"] = t["Trip_Date"].dt.strftime("%Y-%m")
-  for c in TIME_COLS:
-    if c in t.columns:
-      t[c] = pd.to_datetime(t[c], errors="coerce")
 
-  done = t["Job_Status"].eq("Completed")
-  t = t.merge(cp, on="Vehicle_Type", how="left")
-  t = t.merge(vehicles[["Vehicle_Code", "Fuel_Type"]], on="Vehicle_Code", how="left")
-  t = t.merge(ef[["Fuel_Type", "kgCO2_per_L"]], on="Fuel_Type", how="left")
-  route_cols = [c for c in ["Route_Code", "One_Way_km", "Destination_Province_TH", "Delivery_Area"] if c in routes.columns]
-  t = t.merge(routes[route_cols], on="Route_Code", how="left")
-  done = t["Job_Status"].eq("Completed")
-
+def build(ops, p, fuel_prices, imports):
+  """คืน (ตารางรายแถว, ตารางรายวัน)"""
+  t = ops.copy()
+  if t.empty:
+    return t, pd.DataFrame()
+  driver = t["Position"].eq("Driver")
+  valid_date = ~t["Flags"].str.contains("DATE_INVALID")
+  t = t[valid_date].copy()
+  driver = driver[valid_date]
   km = t["Distance_km"].fillna(0)
-  # ---------- ต้นทุนผันแปร ----------
-  t["Revenue_THB"] = np.where(done, t["Agreed_Price_THB"], 0.0)
-  t["Fuel_Cost_THB"] = t["Fuel_Liters"].fillna(0) * t["Fuel_Price_THB_per_L"].fillna(0)
-  t["Tire_Cost_THB"] = km * t["Tire_Count"] * t["Tire_Price_THB"] / t["Tire_Life_km"]
-  t["Oil_Cost_THB"] = km * t["Oil_Change_Cost_THB"] / t["Oil_Change_Interval_km"]
-  t["Repair_Cost_THB"] = km * t["Repair_THB_per_km"]
-  var_cols = ["Fuel_Cost_THB", "Tire_Cost_THB", "Oil_Cost_THB", "Repair_Cost_THB",
-              "Toll_THB", "Driver_Allowance_THB"]
-  t["Variable_Cost_THB"] = t[var_cols].fillna(0).sum(axis=1)
 
-  # ---------- ต้นทุนคงที่ + การปันส่วน ----------
-  fixed = monthly_fixed_costs(vehicles, cp, _months_in_data(t))
-  km_by_vm = t[done].groupby(["Year_Month", "Vehicle_Code"])["Distance_km"].sum().rename("VM_km")
-  km_by_tm = t[done].groupby(["Year_Month", "Vehicle_Type"])["Distance_km"].sum().rename("TM_km")
-  fixed = fixed.merge(km_by_vm, on=["Year_Month", "Vehicle_Code"], how="left")
-  fixed["VM_km"] = fixed["VM_km"].fillna(0)
-  # รถที่ไม่มีเที่ยววิ่งในเดือนนั้น → ต้นทุนทั้งหมดเป็น Idle cost ของประเภทรถนั้น
-  idle_pool = (
-      fixed[fixed["VM_km"] == 0]
-      .groupby(["Year_Month", "Vehicle_Type"])["Fixed_Cost_THB"].sum().rename("Idle_Pool")
-  )
+  # ---------- 1) น้ำมัน ----------
+  price = t["Year_Month"].map(dict(zip(fuel_prices["year_month"], fuel_prices["price"])))
+  t["Fuel_Price"] = price
+  t["Fuel_L"] = np.where(price > 0, t["Fuel_Fee"] / price, np.nan)
+  t["km_per_L"] = np.where(t["Fuel_L"] > 0, km / t["Fuel_L"], np.nan)
 
-  t = t.merge(fixed[["Year_Month", "Vehicle_Code", "Depreciation_THB", "Insurance_THB",
-                     "Driver_Salary_THB", "VM_km"]],
-              on=["Year_Month", "Vehicle_Code"], how="left")
-  t = t.merge(km_by_tm, on=["Year_Month", "Vehicle_Type"], how="left")
-  t = t.merge(idle_pool, on=["Year_Month", "Vehicle_Type"], how="left")
+  # ---------- 2) คาร์บอน ----------
+  ef = p.get("ef_diesel")
+  t["CO2_kg"] = t["Fuel_L"] * ef if ef else np.nan
+  planned = t["Planned_km"].where(t["Planned_km"].between(1, 1000))
+  t["Excess_km"] = (t["Distance_km"] - planned).clip(lower=0).fillna(0)
+  t["CO2_Reducible_kg"] = np.where(t["km_per_L"] > 0, t["Excess_km"] / t["km_per_L"] * (ef or np.nan), 0.0)
 
-  share_own = np.where(done & (t["VM_km"] > 0), km / t["VM_km"], 0.0)
-  share_type = np.where(done & (t["TM_km"] > 0), km / t["TM_km"], 0.0)
-  for c in ["Depreciation_THB", "Insurance_THB", "Driver_Salary_THB"]:
-    t[c] = t[c].fillna(0) * share_own
-  t["Idle_Cost_THB"] = t["Idle_Pool"].fillna(0) * share_type
-  t["Fixed_Cost_THB"] = t[["Depreciation_THB", "Insurance_THB", "Driver_Salary_THB", "Idle_Cost_THB"]].sum(axis=1)
+  # ---------- 3) ค่าเสื่อม + ประกัน ต่อคัน-วัน ----------
+  days_in_month = t["Year_Month"].map(lambda ym: calendar.monthrange(int(ym[:4]), int(ym[5:]))[1])
+  dep_m = depreciation_per_month(p)
+  dep_day = dep_m / days_in_month if dep_m is not None else np.nan
+  ins_day = p["insurance_year"] / 365 if p.get("insurance_year") is not None else np.nan
+  # 1 คัน-วัน ต่อคนขับ 1 คนต่อวัน (ถ้ามีหลายแถวในวันเดียวกัน คิดที่แถวแรก)
+  first_driver_row = ~t[driver].duplicated(["Work_Date", "Username"])
+  t["Vehicle_Day"] = first_driver_row.reindex(t.index, fill_value=False).astype(int)
+  t["Depreciation_THB"] = t["Vehicle_Day"] * dep_day
+  t["Insurance_THB"] = t["Vehicle_Day"] * ins_day
 
-  # ---------- ผลลัพธ์ ----------
-  t["Total_Cost_THB"] = t["Variable_Cost_THB"] + t["Fixed_Cost_THB"]
+  # ---------- 4) รายได้ ต้นทุน กำไร ----------
+  tp = p.get("trip_price")
+  t["Revenue_THB"] = np.where(driver, t["Trips"] * tp, 0.0) if tp is not None else np.nan
+  t["Payment_THB"] = t["Total_Payment"]
+  t["Maintenance_THB"] = km * p["maintenance_km"] if p.get("maintenance_km") is not None else np.nan
+  cost_cols = list(COST_ITEMS)
+  t["Total_Cost_THB"] = t[cost_cols].fillna(0).sum(axis=1)  # หักเฉพาะรายการที่มีค่า
   t["Profit_THB"] = t["Revenue_THB"] - t["Total_Cost_THB"]
-  t["Profit_Margin"] = np.where(t["Revenue_THB"] > 0, t["Profit_THB"] / t["Revenue_THB"] * 100, 0.0)
   t["Cost_per_km"] = np.where(km > 0, t["Total_Cost_THB"] / km, np.nan)
-  t["Revenue_per_km"] = np.where(km > 0, t["Revenue_THB"] / km, np.nan)
-  t["km_per_L"] = np.where(t["Fuel_Liters"] > 0, km / t["Fuel_Liters"], np.nan)
-  t["CO2_kg"] = t["Fuel_Liters"].fillna(0) * t["kgCO2_per_L"].fillna(0)
-  if "Load_kg" in t.columns and "One_Way_km" in t.columns:
-    # ton-km ของเที่ยวขาไป (ขากลับวิ่งรถเปล่า)
-    t["Ton_km"] = t["Load_kg"].fillna(0) / 1000 * t["One_Way_km"].fillna(0)
-  if {"Actual_Delivery", "Scheduled_Delivery"} <= set(t.columns):
-    t["On_Time"] = np.where(
-        done & t["Actual_Delivery"].notna(),
-        t["Actual_Delivery"] <= t["Scheduled_Delivery"], np.nan)
 
-  t = t.drop(columns=["VM_km", "TM_km", "Idle_Pool"])
-  return t, fixed.drop(columns=["VM_km"])
+  # ---------- ช่วงกะ ----------
+  t["Shift_Group"] = np.select(
+      [t["Shift_In_min"] < 6 * 60, t["Shift_In_min"] < 12 * 60, t["Shift_In_min"].notna()],
+      ["กะเช้าตรู่ (ก่อน 06:00)", "กะเช้า (06:00–11:59)", "กะบ่าย/ค่ำ (12:00 เป็นต้นไป)"], "ไม่มีข้อมูลเวลา")
+
+  # ---------- รายวัน: รถที่วิ่ง vs รถทั้งหมด ----------
+  fleet = dict(zip(imports["year_month"], imports["fleet_total"]))
+  daily = (t[t["Vehicle_Day"] == 1].groupby(["Year_Month", "Work_Date"])
+           .agg(Active_Vehicles=("Username", "nunique")).reset_index())
+  daily["Fleet_Total"] = daily["Year_Month"].map(fleet).fillna(p.get("fleet_total") or 0)
+  daily["Idle_Vehicles"] = (daily["Fleet_Total"] - daily["Active_Vehicles"]).clip(lower=0)
+  daily["Utilization"] = np.where(daily["Fleet_Total"] > 0, daily["Active_Vehicles"] / daily["Fleet_Total"] * 100, np.nan)
+  d_dep = daily["Year_Month"].map(lambda ym: calendar.monthrange(int(ym[:4]), int(ym[5:]))[1])
+  if dep_m is None and p.get("insurance_year") is None:
+    daily["Idle_Cost_THB"] = np.nan  # ยังไม่มีข้อมูลค่าเสื่อม/ประกัน → แสดงเป็น "รอข้อมูล" ไม่ใช่ 0
+  else:
+    per_vday = (dep_m / d_dep if dep_m is not None else 0) + (_nz(p.get("insurance_year")) / 365)
+    daily["Idle_Cost_THB"] = daily["Idle_Vehicles"] * per_vday
+  return t, daily
 
 
-def summarize(df, by):
-  """สรุปตัวชี้วัดตามกลุ่ม (เช่น ประเภทรถ / เส้นทาง)"""
-  d = df[df["Job_Status"] == "Completed"]
-  g = d.groupby(by).agg(
-      Trips=("Trip_ID", "count"), Distance_km=("Distance_km", "sum"),
-      Fuel_Liters=("Fuel_Liters", "sum"), Revenue_THB=("Revenue_THB", "sum"),
-      Variable_Cost_THB=("Variable_Cost_THB", "sum"), Fixed_Cost_THB=("Fixed_Cost_THB", "sum"),
-      Total_Cost_THB=("Total_Cost_THB", "sum"), Profit_THB=("Profit_THB", "sum"),
-      CO2_kg=("CO2_kg", "sum"),
+def kpis(t, daily, p):
+  """ตัวเลขสรุปสำหรับการ์ด"""
+  drv = t[t["Position"] == "Driver"]
+  km = t["Distance_km"].sum()
+  k = dict(
+      rows=len(t), days=t["Work_Date"].nunique(),
+      active_avg=daily["Active_Vehicles"].mean() if len(daily) else 0,
+      active_max=daily["Active_Vehicles"].max() if len(daily) else 0,
+      fleet=daily["Fleet_Total"].max() if len(daily) else p.get("fleet_total"),
+      util=daily["Utilization"].mean() if len(daily) else np.nan,
+      km=km, trips=drv["Trips"].sum(), drops=drv["Drops"].sum(),
+      payment=t["Payment_THB"].sum(),
+      revenue=t["Revenue_THB"].sum(min_count=1),
+      cost=t["Total_Cost_THB"].sum(),
+      idle=daily["Idle_Cost_THB"].sum(min_count=1) if len(daily) else np.nan,
+      fuel_l=t["Fuel_L"].sum(min_count=1), co2=t["CO2_kg"].sum(min_count=1),
+      co2_red=t["CO2_Reducible_kg"].sum(min_count=1),
+      excess_km=t["Excess_km"].sum(),
+      ot=t["OT_Hrs"].sum(), ot_req=t["OT_Request_Hrs"].sum(), ot_appr=t["OT_Approved_Hrs"].sum(),
+  )
+  k["profit_rows"] = k["revenue"] - k["cost"] if pd.notna(k["revenue"]) else np.nan
+  k["profit"] = k["profit_rows"] - (0 if pd.isna(k["idle"]) else k["idle"]) if pd.notna(k["profit_rows"]) else np.nan
+  k["km_per_L"] = km / k["fuel_l"] if k["fuel_l"] else np.nan
+  return k
+
+
+def group_summary(t, by):
+  """สรุปตามกลุ่ม (สาขา / วัน / กะ ฯลฯ)"""
+  drv = t["Position"].eq("Driver")
+  sum1 = lambda s: s.sum(min_count=1)  # noqa: E731 — ถ้าไม่มีค่าเลยให้เป็นค่าว่าง ไม่ใช่ 0
+  g = t.assign(_trips=t["Trips"].where(drv, 0), _drops=t["Drops"].where(drv, 0)).groupby(by).agg(
+      Person_Days=("Username", "size"), Vehicle_Days=("Vehicle_Day", "sum"),
+      Trips=("_trips", "sum"), Drops=("_drops", "sum"), Distance_km=("Distance_km", "sum"),
+      Payment_THB=("Payment_THB", "sum"), Total_Cost_THB=("Total_Cost_THB", "sum"),
+      Revenue_THB=("Revenue_THB", sum1), Profit_THB=("Profit_THB", sum1),
+      Fuel_L=("Fuel_L", sum1), CO2_kg=("CO2_kg", sum1), OT_Hrs=("OT_Hrs", "sum"),
   ).reset_index()
-  g["Profit_Margin"] = np.where(g["Revenue_THB"] > 0, g["Profit_THB"] / g["Revenue_THB"] * 100, 0)
-  g["Cost_per_km"] = g["Total_Cost_THB"] / g["Distance_km"]
-  g["Revenue_per_km"] = g["Revenue_THB"] / g["Distance_km"]
-  g["km_per_L"] = g["Distance_km"] / g["Fuel_Liters"]
-  g["CO2_kg_per_km"] = g["CO2_kg"] / g["Distance_km"]
+  g["Cost_per_km"] = np.where(g["Distance_km"] > 0, g["Total_Cost_THB"] / g["Distance_km"], np.nan)
+  g["Cost_per_Drop"] = np.where(g["Drops"] > 0, g["Total_Cost_THB"] / g["Drops"], np.nan)
+  g["CO2_per_km"] = np.where(g["Distance_km"] > 0, g["CO2_kg"] / g["Distance_km"], np.nan)
   return g
-
-
-def check_route_distances(trips, routes):
-  """เที่ยวที่ระยะทางไม่ตรงกับระยะมาตรฐานของเส้นทาง (Route master)"""
-  m = trips.merge(routes[["Route_Code", "Round_Trip_km"]], on="Route_Code", how="left")
-  m = m[m["Job_Status"] == "Completed"]
-  bad = m[(m["Distance_km"] - m["Round_Trip_km"]).abs() > 0.05 * m["Round_Trip_km"]]
-  return bad
-
-
-def price_regression(df):
-  """หาความสัมพันธ์ ราคา = a + b × ระยะเที่ยวเดียว แยกประเภทรถ (Least squares)"""
-  d = df[(df["Job_Status"] == "Completed") & df["One_Way_km"].notna()]
-  rows = []
-  for vt, g in d.groupby("Vehicle_Type"):
-    if g["One_Way_km"].nunique() < 2:
-      continue
-    b, a = np.polyfit(g["One_Way_km"], g["Agreed_Price_THB"], 1)
-    pred = a + b * g["One_Way_km"]
-    ss_res = ((g["Agreed_Price_THB"] - pred) ** 2).sum()
-    ss_tot = ((g["Agreed_Price_THB"] - g["Agreed_Price_THB"].mean()) ** 2).sum()
-    rows.append(dict(Vehicle_Type=vt, Base_THB=a, THB_per_km=b,
-                     R2=1 - ss_res / ss_tot if ss_tot else np.nan, n=len(g)))
-  return pd.DataFrame(rows)
-
-
-def fleet_utilization(trips, vehicles):
-  """อัตราการใช้รถ = วันที่มีงาน ÷ วันทำงานในช่วงข้อมูล (จ.–ส.)"""
-  d = trips[trips["Job_Status"] == "Completed"]
-  start, end = trips["Trip_Date"].min(), trips["Trip_Date"].max()
-  workdays = len(pd.bdate_range(start, end, freq="C", weekmask="Mon Tue Wed Thu Fri Sat"))
-  used = d.groupby("Vehicle_Code")["Trip_Date"].nunique().rename("Days_Used")
-  v = vehicles.set_index("Vehicle_Code").join(used).reset_index()
-  v["Days_Used"] = v["Days_Used"].fillna(0).astype(int)
-  v["Utilization"] = v["Days_Used"] / workdays * 100
-  return v, workdays
