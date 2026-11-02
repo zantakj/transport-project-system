@@ -1,0 +1,9 @@
+# ฐานข้อมูลและไฟล์ข้อมูลบริษัท ห้ามขึ้น GitHub (repo เป็น public)
+*.db
+*.xlsx
+!mockup/*.xlsx
+*.csv
+
+# Python
+__pycache__/
+*.pyc
