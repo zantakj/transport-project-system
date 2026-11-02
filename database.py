@@ -2,6 +2,7 @@
 database.py — ฐานข้อมูล SQLite ของระบบ
 
 ตาราง
+  (ไฟล์ transport_real.db)
   ops          ข้อมูลการปฏิบัติงานรายวันที่ผ่านการจัดเตรียมแล้ว (1 แถว = พนักงาน 1 คน 1 วัน)
   fleet_master ทะเบียนรถจากชีต Data Master
   imports      ประวัติการนำเข้ารายเดือน + จำนวนรถทั้งหมดของบริษัทในเดือนนั้น
@@ -14,7 +15,7 @@ import sqlite3
 
 import pandas as pd
 
-DB_PATH = "transport.db"
+DB_PATH = "transport_real.db"  # ไฟล์แยกจากเว็บเวอร์ชันเดิม (transport.db) เพื่อไม่ให้ใช้ไฟล์ร่วมกัน
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
