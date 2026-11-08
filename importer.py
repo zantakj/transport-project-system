@@ -56,12 +56,85 @@ def _norm_zone(z):
   return re.sub(r"\s+", "", str(z)).upper()
 
 
-def read_trips(sheets):
-  """คืน (trips, other, qlog, missing_columns) จาก dict ของชีต"""
+# ชื่อคอลัมน์อื่นที่ระบบรู้จัก (ภาษาไทย / สะกดต่าง) — เทียบแบบไม่สนตัวพิมพ์ เว้นวรรค _ - ( ) .
+ALIASES = {
+    "Trip_ID": ["TripID", "Trip No", "รหัสเที่ยว", "รหัสเที่ยววิ่ง", "เลขที่เที่ยว"],
+    "Trip_Date": ["Date", "Work Date", "TripDate", "วันที่", "วันที่วิ่ง", "วันที่ทำงาน"],
+    "Driver_Code": ["Driver", "DriverID", "Driver ID", "Employee Code", "รหัสคนขับ", "รหัสพนักงานขับรถ",
+                    "รหัสพนักงาน"],
+    "Branch_Code": ["Branch", "Store", "Store Code", "Route_Code", "Route", "St.", "รหัสสาขา", "สาขา"],
+    "Zone": ["Area", "Delivery Area", "โซน", "พื้นที่"],
+    "Distance_km": ["Distance", "Actual Distance", "Actual_km", "km", "ระยะทาง", "ระยะทางจริง", "ระยะทาง (กม.)"],
+    "Planned_Distance_km": ["Planned Distance", "Planned_km", "Plan km", "Plan Distance", "ระยะทางตามแผน",
+                            "ระยะตามแผน", "ระยะทางแผน"],
+    "Drops": ["Drop", "Drop Points", "Stops", "จุดส่ง", "จำนวนจุดส่ง", "จุดส่งต่อเที่ยว"],
+    "Revenue_THB": ["Revenue", "EBilling", "E-Billing", "Income", "รายได้", "รายได้ต่อเที่ยว",
+                    "ยอด E-Billing"],
+    "Driver_Wage_THB": ["Wage", "Driver Wage", "ค่าจ้าง", "ค่าจ้างคนขับ", "ค่าจ้างต่อเที่ยว"],
+    "OT_Approved_Hours": ["OT", "OT Hours", "OT_Hrs", "OT Approved", "OT_Approved_Hrs", "ชั่วโมง OT",
+                          "OT อนุมัติ", "ชั่วโมงทำงานล่วงเวลา"],
+    "EBilling_Status": ["Status", "Billing Status", "E-Billing Status", "สถานะ E-Billing", "สถานะวางบิล"],
+    "Trips_That_Day": ["Trips per Day", "จำนวนเที่ยวของคนขับวันนั้น", "เที่ยวของคนขับวันนั้น"],
+    "Fuel_Liters": ["Fuel L", "Liters", "ลิตรน้ำมัน", "น้ำมัน (ลิตร)"],
+    "Source_Sheet": ["ชีตต้นฉบับ"], "Source_Row": ["แถวต้นฉบับ"], "Distance_Source": ["ที่มาระยะทาง"],
+}
+DAILY_HINTS = ["จำนวนเที่ยวทั้งหมด", "จำนวนจุดส่งทั้งหมด", "Booking", "E-Billing Status"]
+
+
+def _key(name):
+  return re.sub(r"[\s_\-().]+", "", str(name)).lower()
+
+
+_LOOKUP = {}
+for _c, _names in ALIASES.items():
+  for _n in [_c] + _names:
+    _LOOKUP.setdefault(_key(_n), _c)
+for _c in REQUIRED + OPTIONAL:
+  _LOOKUP.setdefault(_key(_c), _c)
+
+
+def auto_map(columns):
+  """จับคู่ชื่อคอลัมน์ในไฟล์กับชื่อมาตรฐานตามตารางที่ 3.3 → {ชื่อในไฟล์: ชื่อมาตรฐาน}"""
+  exact = {_key(c): c for c in ALIASES.keys() | set(REQUIRED + OPTIONAL)}
+  out = {col: exact[_key(col)] for col in columns if _key(col) in exact}  # ชื่อมาตรฐานตรงตัวมาก่อน
+  used = set(out.values())
+  for col in columns:
+    canon = _LOOKUP.get(_key(col))
+    if col not in out and canon and canon not in used:
+      out[col] = canon
+      used.add(canon)
+  return out
+
+
+def pick_trip_sheet(sheets):
+  """ใช้ชีตชื่อ Trips ถ้ามี ไม่อย่างนั้นใช้ชีตที่จับคู่คอลัมน์จำเป็นได้มากที่สุด"""
   name = next((s for s in sheets if s.strip().lower() == "trips"), None)
+  if name:
+    return name
+  score = {s: sum(v in REQUIRED for v in auto_map(df.columns).values()) for s, df in sheets.items()}
+  return max(score, key=score.get) if score else None
+
+
+def looks_daily(df):
+  """เป็นไฟล์รายวันของบริษัท (ยังไม่ได้แปลงเป็นรายเที่ยว) หรือไม่"""
+  cols = " ".join(map(str, df.columns))
+  return sum(h in cols for h in DAILY_HINTS) >= 2
+
+
+def read_trips(sheets, manual=None, sheet=None):
+  """คืน (trips, other, qlog, missing_columns) จาก dict ของชีต
+  manual: {ชื่อมาตรฐาน: ชื่อคอลัมน์ในไฟล์} สำหรับคอลัมน์ที่ผู้ใช้จับคู่เอง"""
+  name = sheet or pick_trip_sheet(sheets)
   if name is None:
-    return None, None, None, ["ชีต Trips"]
+    return None, None, None, ["ชีตข้อมูลรายเที่ยว"]
   raw = sheets[name]
+  rename = auto_map(raw.columns)
+  for canon, col in (manual or {}).items():
+    if col:
+      rename = {k: v for k, v in rename.items() if v != canon and k != col}
+      rename[col] = canon
+  raw = raw.rename(columns=rename)
+  raw = raw.loc[:, ~raw.columns.duplicated()]
   missing = [c for c in REQUIRED if c not in raw.columns]
   if missing:
     return None, None, None, missing
@@ -104,6 +177,8 @@ def read_trips(sheets):
   t["Flags"] = flags.apply(lambda r: " ".join(c for c in FLAGS if r[c]), axis=1)
   t = t[~flags["MISSING_KEY"] & ~flags["DUP_TRIP"]].copy()
   t["Year_Month"] = t["Trip_Date"].dt.strftime("%Y-%m")
+  t.attrs["sheet"] = name
+  t.attrs["renamed"] = {k: v for k, v in rename.items() if k != v}
   t.attrs["dropped"] = {"MISSING_KEY": int(flags["MISSING_KEY"].sum()), "DUP_TRIP": int(flags["DUP_TRIP"].sum())}
 
   other = pd.DataFrame(columns=OTHER_COLS + ["Year_Month"])

@@ -5,18 +5,15 @@ import streamlit as st
 
 import database as db
 import importer as im
-from common import is_admin, th_month, to_display
+from common import LABELS, is_admin, th_month, to_display
 
 st.title("📥 นำเข้าข้อมูล")
 if not is_admin():
   st.error("หน้านี้สำหรับผู้ดูแลระบบเท่านั้น")
   st.stop()
 
-st.markdown("อัปโหลดไฟล์ Excel **รายเที่ยว** ตามโครงสร้างในตารางที่ 3.3 (ชีต `Trips` และ `Other_Billing` ถ้ามี) "
-            "แล้วเลือกเดือนของข้อมูลที่ต้องการนำเข้า ระบบจะตรวจโครงสร้างไฟล์และคุณภาพข้อมูลก่อนบันทึก")
-with st.expander("คอลัมน์ที่ต้องมีในชีต Trips"):
-  st.code(", ".join(im.REQUIRED))
-  st.caption("ไม่บังคับ: " + ", ".join(im.OPTIONAL) + " — ข้อมูลของ Helper ในชีต Other_Billing จะถูกตัดออกอัตโนมัติ")
+st.markdown("อัปโหลดไฟล์ Excel **รายเที่ยว** (1 แถว = 1 เที่ยววิ่ง) แล้วเลือกเดือนของข้อมูลที่ต้องการนำเข้า "
+            "ระบบจะอ่านคอลัมน์ให้อัตโนมัติ และตรวจโครงสร้างไฟล์กับคุณภาพข้อมูลก่อนบันทึก")
 
 imports = db.load_imports()
 if not imports.empty:
@@ -40,15 +37,39 @@ if up is None:
 
 
 @st.cache_data(show_spinner="กำลังอ่านไฟล์...")
-def read_book(data, name):
-  sheets = pd.read_excel(io.BytesIO(data), sheet_name=None, engine="openpyxl")
-  return im.read_trips(sheets)
+def load_sheets(data, name):
+  return pd.read_excel(io.BytesIO(data), sheet_name=None, engine="openpyxl")
 
 
-trips, other, qlog, missing = read_book(up.getvalue(), up.name)
+sheets = load_sheets(up.getvalue(), up.name)
+sheet = im.pick_trip_sheet(sheets)
+manual = st.session_state.get(f"map_{up.name}", {})
+trips, other, qlog, missing = im.read_trips(sheets, manual, sheet)
+
 if missing:
-  st.error("โครงสร้างไฟล์ไม่ถูกต้อง — ไม่พบ: " + ", ".join(missing))
+  raw = sheets[sheet]
+  if im.looks_daily(raw):
+    st.error("ไฟล์นี้เป็นข้อมูล **รายวัน** ของบริษัท (1 แถว = พนักงาน 1 คนใน 1 วัน) ระบบรับเฉพาะไฟล์ที่แปลงเป็น"
+             "**รายเที่ยว** แล้ว ตามขั้นตอนในหัวข้อ 3.4.4")
+    st.stop()
+  st.warning(f"อ่านชีต **{sheet}** แล้ว แต่หาคอลัมน์เหล่านี้ไม่เจอ: " + ", ".join(missing) +
+             " — เลือกจับคู่กับคอลัมน์ในไฟล์ด้านล่าง")
+  with st.form("mapping"):
+    cols = [None] + [str(c) for c in raw.columns]
+    pick = {}
+    grid = st.columns(3)
+    for i, need in enumerate(missing):
+      pick[need] = grid[i % 3].selectbox(f"{need} ({LABELS.get(need, need)})", cols, key=f"pick_{need}")
+    if st.form_submit_button("ใช้การจับคู่นี้", type="primary"):
+      st.session_state[f"map_{up.name}"] = {**manual, **{k: v for k, v in pick.items() if v}}
+      st.rerun()
   st.stop()
+
+renamed = trips.attrs.get("renamed", {})
+if renamed or sheet.strip().lower() != "trips":
+  with st.expander(f"ระบบอ่านจากชีต {sheet} และจับคู่ชื่อคอลัมน์ให้ {len(renamed)} คอลัมน์"):
+    st.dataframe(pd.DataFrame({"ชื่อในไฟล์": list(renamed), "ระบบใช้เป็น": list(renamed.values())}),
+                 hide_index=True)
 
 found = sorted(trips["Year_Month"].unique())
 st.markdown("#### เดือนที่พบในไฟล์")
