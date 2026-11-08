@@ -111,6 +111,14 @@ def clear_all_data():
     c.execute("DELETE FROM imports")
 
 
+def reset_params():
+  """คืนพารามิเตอร์และราคาน้ำมันเป็นค่าเริ่มต้นตามรายงาน (ตารางที่ 3.5)"""
+  with get_connection() as c:
+    for table in ("params", "fleet_master", "fuel_prices"):
+      c.execute(f"DELETE FROM {table}")
+  init_db()
+
+
 def _read(table):
   with get_connection() as c:
     return pd.read_sql(f"SELECT * FROM {table}", c) if _exists(c, table) else pd.DataFrame()

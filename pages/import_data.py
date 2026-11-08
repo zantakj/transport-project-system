@@ -30,14 +30,23 @@ if not imports.empty:
     st.cache_data.clear()
     st.rerun()
 
-  with st.expander("🗑️ ล้างข้อมูลทั้งหมด"):
-    st.warning(f"ลบข้อมูลเที่ยววิ่งทั้ง {len(imports)} เดือนออกจากระบบ (ยังเก็บบัญชีผู้ใช้ พารามิเตอร์ และราคาน้ำมันไว้) "
-               "ย้อนกลับไม่ได้ ต้องนำเข้าไฟล์ใหม่")
-    sure = st.checkbox("ยืนยันว่าต้องการล้างข้อมูลทั้งหมด")
-    if st.button("ล้างข้อมูลทั้งหมด", type="primary", disabled=not sure):
+with st.expander("🗑️ ล้างข้อมูล / รีเซ็ตระบบ"):
+  st.caption("เลือกสิ่งที่ต้องการล้าง — บัญชีผู้ใช้และรหัสผ่านจะไม่ถูกลบ")
+  do_data = st.checkbox(f"ล้างข้อมูลเที่ยววิ่งทั้งหมด ({len(imports)} เดือน)", value=not imports.empty,
+                        disabled=imports.empty)
+  do_param = st.checkbox("รีเซ็ตพารามิเตอร์และราคาน้ำมันกลับเป็นค่าเริ่มต้นตามรายงาน "
+                         "(173 คัน, 500 บาท, 80 บาท, 11 กม./ลิตร, 494.97, 5,000, EF 2.7406, ราคาน้ำมัน มิ.ย.–ต.ค.)")
+  if do_data or do_param:
+    st.warning("ย้อนกลับไม่ได้" + (" — ต้องนำเข้าไฟล์ Excel ใหม่" if do_data else "") +
+               (" — ค่าที่แก้ไขไว้ในหน้าตั้งค่าจะหาย" if do_param else ""))
+  sure = st.checkbox("ยืนยัน", key="confirm_reset")
+  if st.button("ล้างตามที่เลือก", type="primary", disabled=not (sure and (do_data or do_param))):
+    if do_data:
       db.clear_all_data()
-      st.cache_data.clear()
-      st.rerun()
+    if do_param:
+      db.reset_params()
+    st.cache_data.clear()
+    st.rerun()
 
 st.markdown("---")
 up = st.file_uploader("เลือกไฟล์ Excel (.xlsx)", type=["xlsx"])
