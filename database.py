@@ -52,7 +52,9 @@ PARAMS = {
     "ef_diesel": (4, "ค่าการปล่อยก๊าซเรือนกระจกของดีเซล", 2.7406, "kgCO₂e/ลิตร", REF,
                   "องค์การบริหารจัดการก๊าซเรือนกระจก (2565) และ IPCC (2006)"),
 }
-BANGCHAK = "ราคาเฉลี่ยรายเดือนดีเซล B7 กรุงเทพฯ บริษัท บางจาก คอร์ปอเรชั่น จำกัด (มหาชน) (ม.ป.ป.)"
+FUEL_SOURCE = ("ราคาขายปลีกดีเซล B7 ของ ปตท. (PTT Station) เขตกรุงเทพฯ เฉลี่ยถ่วงน้ำหนักตามจำนวนวัน"
+               " ที่ใช้แต่ละราคาในเดือน (บริษัทเติมน้ำมันที่ ปตท.)")
+OLD_FUEL_SOURCE = "ราคาเฉลี่ยรายเดือนดีเซล B7 กรุงเทพฯ บริษัท บางจาก คอร์ปอเรชั่น จำกัด (มหาชน) (ม.ป.ป.)"
 DEFAULT_FUEL = {"2026-06": 39.25, "2026-07": 36.05, "2026-08": 37.59, "2026-09": 40.26, "2026-10": 42.84}
 
 
@@ -67,7 +69,8 @@ def init_db():
       for k, v in rows.items():
         c.execute(f"INSERT OR IGNORE INTO {table} VALUES (?,?,?,?,?,?,?)", (k, *v))
     for ym, price in DEFAULT_FUEL.items():
-      c.execute("INSERT OR IGNORE INTO fuel_prices VALUES (?,?,?)", (ym, price, BANGCHAK))
+      c.execute("INSERT OR IGNORE INTO fuel_prices VALUES (?,?,?)", (ym, price, FUEL_SOURCE))
+    c.execute("UPDATE fuel_prices SET source=? WHERE source=?", (FUEL_SOURCE, OLD_FUEL_SOURCE))
 
 
 def _exists(c, name):

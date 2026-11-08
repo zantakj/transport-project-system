@@ -16,7 +16,7 @@ view["value"] = view["value"].map(lambda v: "—" if pd.isna(v) else f"{v:,.4f}"
 fuel = db.load_fuel_prices()
 fuel_txt = " ".join(f"{th_month(m)[:-5]} {v:.2f}" for m, v in zip(fuel["year_month"], fuel["price"]))
 view.loc[len(view)] = ["ราคาน้ำมันดีเซลเฉลี่ยรายเดือน", fuel_txt, "บาท/ลิตร", "ผู้ใช้กรอก",
-                       db.BANGCHAK + " ผู้ใช้งานแก้ไขได้ในระบบ"]
+                       db.FUEL_SOURCE + " ผู้ใช้งานแก้ไขได้ในระบบ"]
 st.dataframe(view.rename(columns={"label": "พารามิเตอร์", "value": "ค่า", "unit": "หน่วย", "status": "สถานะ",
                                   "source": "แหล่งที่มา"}), hide_index=True, width="stretch")
 
@@ -46,7 +46,7 @@ if admin:
     ym = c[0].selectbox("เดือน", months, format_func=th_month)
     cur = fuel.set_index("year_month")["price"].get(ym)
     pr = c[1].number_input("บาท/ลิตร", min_value=0.0, value=float(cur) if cur is not None else None, format="%.2f")
-    src = c[2].text_input("แหล่งที่มา", fuel.set_index("year_month")["source"].get(ym, db.BANGCHAK))
+    src = c[2].text_input("แหล่งที่มา", fuel.set_index("year_month")["source"].get(ym, db.FUEL_SOURCE))
     if st.form_submit_button("บันทึกราคาน้ำมัน", type="primary") and pr:
       db.upsert_fuel_price(ym, pr, src)
       st.cache_data.clear()
