@@ -62,7 +62,7 @@ st.dataframe(tb.rename(columns={
     "Year_Month": "เดือน", "trips": "เที่ยว", "km": "ระยะทาง (กม.)", "active_avg": "รถที่วิ่ง/วัน",
     "util": "อัตราการใช้รถ (%)", "revenue": "รายได้", "cost": "ต้นทุนรวม", "profit": "กำไรสุทธิ",
     "margin": "อัตรากำไร (%)", "co2": "CO₂e (ตัน)", "trips_chg": "เที่ยว เปลี่ยนแปลง (%)",
-    "revenue_chg": "รายได้ เปลี่ยนแปลง (%)", "profit_chg": "กำไร เปลี่ยนแปลง (%)"}).style.format(precision=1,
+    "revenue_chg": "รายได้ เปลี่ยนแปลง (%)", "profit_chg": "กำไร เปลี่ยนแปลง (%)"}).style.format(precision=1, na_rep="—",
                                                                                          thousands=","),
     hide_index=True, width="stretch")
 st.caption("อัตราการเปลี่ยนแปลง (%) = (ค่าเดือนนี้ − ค่าเดือนก่อน) ÷ ค่าเดือนก่อน × 100 · "
