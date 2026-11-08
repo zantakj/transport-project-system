@@ -2,64 +2,57 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import calculations as calc
-import database as db
-from common import COLORS, PLOT, baht, card, get_data, num, sidebar_filters
+from common import COLORS, PLOT, baht, card, fuel_notice, get_data, num, sidebar_filters, th_month
 
 st.title("🌿 น้ำมันและคาร์บอน")
-t, daily, p, imports = get_data()
-df, d, month = sidebar_filters(t, daily)
-k = calc.kpis(df, d, p)
-fuel = db.load_fuel_prices()
-missing = sorted(set(df["Year_Month"]) - set(fuel["year_month"]))
-if missing:
-  st.warning("⏳ ยังไม่ได้กรอกราคาน้ำมันของเดือน " + ", ".join(missing) + " — กรอกได้ที่หน้า **ตั้งค่าพารามิเตอร์**")
+t, o, p = get_data()
+df, do, months, whole = sidebar_filters(t, o)
+k = calc.summarize(df, do, p, months, whole)
+fuel_notice(k)
 
+st.markdown("##### เชื้อเพลิง (ค่าประมาณจากระยะทาง — บริษัทไม่มีบันทึกการเติมน้ำมันจริง)")
+c = st.columns(3)
+card(c[0], "ปริมาณการใช้เชื้อเพลิง", num(k["fuel_l"], 2, " ลิตร"),
+     f"{num(k['km'], 0)} กม. ÷ {p['km_per_l']:g} กม./ลิตร")
+card(c[1], "ค่าน้ำมัน", baht(k["fuel_cost"]), "ลิตร × ราคาดีเซลเฉลี่ยของเดือนนั้น", "warn")
+card(c[2], "ค่าน้ำมันต่อกิโลเมตร", num((k["fuel_cost"] or 0) / k["km"], 2, " บาท/กม."), "")
+
+st.markdown("##### ก๊าซเรือนกระจก (Carbon Footprint)")
 c = st.columns(4)
-card(c[0], "⛽ น้ำมันที่ใช้", num(k["fuel_l"], 0, " ลิตร"), "ค่าน้ำมัน ÷ ราคาน้ำมันต่อลิตร")
-card(c[1], "📏 อัตราสิ้นเปลือง", num(k["km_per_L"], 2, " กม./ลิตร"), "อัตราตามสัญญาคิดเงิน (ดูหมายเหตุ)", "warn")
-card(c[2], "🌿 CO₂e รวม", num(k["co2"] / 1000 if k["co2"] else None, 2, " ตัน"),
-     f"{num(k['co2'] / k['km'] if k['co2'] and k['km'] else None, 3)} กก./กม. · "
-     f"{num(k['co2'] / k['drops'] if k['co2'] and k['drops'] else None, 2)} กก./จุดส่ง", "good")
-tver = p.get("tver_price")
-red_t = (k["co2_red"] or 0) / 1000
-card(c[3], "♻️ ศักยภาพลดคาร์บอน", num(red_t, 2, " ตัน"),
-     f"มูลค่าประมาณการ {baht(red_t * tver) if tver else 'รอราคา T-VER'}", "primary")
+card(c[0], "ปริมาณการปล่อยรวม", num(k["co2"] / 1000, 2, " ตัน CO₂e"), f"{num(k['co2'], 2)} กก.", "good")
+card(c[1], "ต่อกิโลเมตร", num(k["co2_km"], 3, " กก. CO₂e"), "", "good")
+card(c[2], "ต่อจุดส่ง", num(k["co2_drop"], 3, " กก. CO₂e"), "", "good")
+card(c[3], "ต่อเที่ยว", num(k["co2_trip"], 2, " กก. CO₂e"), "", "good")
 
-st.markdown("#### CO₂e รายวัน")
-g = df.groupby("Work_Date").agg(CO2=("CO2_kg", "sum"), km=("Distance_km", "sum")).reset_index()
+st.markdown("##### ศักยภาพลดการปล่อยจากระยะทางที่เกินแผน")
+c = st.columns(3)
+card(c[0], "ระยะทางที่เกินแผนรวม", num(k["excess_km"], 0, " กม."), "เฉพาะเที่ยวที่วิ่งเกินระยะตามแผน", "warn")
+card(c[1], "ศักยภาพลดการปล่อย", num(k["reduction"] / 1000, 2, " ตัน CO₂e"),
+     f"= {num(k['excess_km'], 0)} ÷ {p['km_per_l']:g} × {p['ef_diesel']}", "good")
+card(c[2], "เที่ยวที่ไม่มีระยะตามแผน", num(k["no_plan"], 0, " เที่ยว"), "ไม่นำมาคำนวณศักยภาพลด", "muted")
+st.info("ℹ️ ค่านี้เป็น **การประเมินเบื้องต้น** ของผลกระทบจากระยะทางที่เกินแผน **ไม่ใช่คาร์บอนเครดิต** ที่บริษัทได้รับหรือซื้อขายได้ "
+        "เพราะยังไม่ได้ขึ้นทะเบียนโครงการ T-VER ไม่ได้ใช้ระเบียบวิธีที่ได้รับการรับรอง และไม่ได้ผ่านการทวนสอบโดยผู้ประเมินภายนอก")
+
+st.markdown("#### แนวโน้มรายเดือน (ทั้งบริษัท)")
+m = calc.monthly(t, o, p)
+x = m["Year_Month"].map(th_month)
 fig = go.Figure()
-fig.add_bar(x=g["Work_Date"], y=g["CO2"] / 1000, name="CO₂e (ตัน)", marker_color=COLORS["good"])
-fig.add_scatter(x=g["Work_Date"], y=g["km"], name="ระยะทาง (กม.)", yaxis="y2", mode="lines",
-                line_color=COLORS["primary"])
-fig.update_layout(height=320, yaxis_title="ตัน CO₂e", legend=dict(orientation="h", y=1.12),
-                  yaxis2=dict(overlaying="y", side="right", title="กม.", showgrid=False), **PLOT)
+fig.add_bar(x=x, y=m["co2"] / 1000, name="CO₂e (ตัน)", marker_color=COLORS["good"])
+fig.add_bar(x=x, y=m["reduction"] / 1000, name="ศักยภาพลด (ตัน)", marker_color=COLORS["muted"])
+fig.add_scatter(x=x, y=m["fuel_l"], name="เชื้อเพลิง (ลิตร)", yaxis="y2", mode="lines+markers",
+                line=dict(color=COLORS["warn"], width=3))
+fig.update_layout(barmode="group", height=360, yaxis_title="ตัน CO₂e", legend=dict(orientation="h", y=1.15),
+                  yaxis2=dict(overlaying="y", side="right", title="ลิตร"), **PLOT)
 st.plotly_chart(fig, width="stretch")
 
-left, right = st.columns(2)
-with left:
-  st.markdown("#### วิธีคำนวณ")
+with st.expander("วิธีคำนวณและแหล่งอ้างอิง"):
   st.markdown(f"""
-**1) ปริมาณน้ำมัน** = ค่าน้ำมัน (บาท) ÷ ราคาน้ำมัน (บาท/ลิตร)
+**วิธีอิงปริมาณเชื้อเพลิง (Fuel-Based Method)** ตาม IPCC (2006) สำหรับการเผาไหม้เชื้อเพลิงจากแหล่งเคลื่อนที่
 
-**2) CO₂e** = ลิตร × EF = ลิตร × **{p.get('ef_diesel')} kgCO₂e/ลิตร**
-วิธี Fuel-based ตาม IPCC 2006 Guidelines Vol.2 บทที่ 3 (Mobile Combustion)
-ค่า EF จากตารางค่าการปล่อยสำหรับ CFO ของ อบก. (น้ำมันดีเซล การเผาไหม้เคลื่อนที่)
+1. ปริมาณเชื้อเพลิง (ลิตร) = ระยะทาง (กม.) ÷ {p['km_per_l']:g} กม./ลิตร
+2. ปริมาณการปล่อย (กก. CO₂e) = ปริมาณเชื้อเพลิง (ลิตร) × {p['ef_diesel']} กก. CO₂e/ลิตร
+3. ศักยภาพลดการปล่อย (กก. CO₂e) = ผลรวมของ (ระยะทางจริง − ระยะทางตามแผน) เฉพาะเที่ยวที่เกินแผน ÷ {p['km_per_l']:g} × {p['ef_diesel']}
 
-**3) ศักยภาพลดคาร์บอน** = ระยะที่วิ่งเกินแผน ÷ กม./ลิตร × EF
-ระยะเกินแผน = actual − planned (นับเฉพาะค่าบวก) รวม **{num(k['excess_km'], 0, ' กม.')}**
+ค่า EF 2.7406 มาจากตารางค่าการปล่อยก๊าซเรือนกระจกสำหรับการคำนวณคาร์บอนฟุตพริ้นท์ขององค์กร
+ฉบับปรับปรุงเดือนเมษายน พ.ศ. 2565 ขององค์การบริหารจัดการก๊าซเรือนกระจก (องค์การมหาชน) ซึ่งอ้างอิงค่าจาก IPCC
 """)
-with right:
-  st.markdown("#### ข้อควรระวัง (สำหรับการนำเสนอ)")
-  st.markdown("""
-- **ค่าน้ำมันในไฟล์บริษัทคิดจาก ระยะทางที่จ่ายเงิน × อัตราบาท/กม. ตามสัญญา** (เช่น 4.18 บาท/กม. ใน มิ.ย.)
-  ดังนั้น กม./ลิตร ที่ได้คือ "อัตราสิ้นเปลืองตามสัญญา" ไม่ใช่อัตราที่วัดจากการเติมน้ำมันจริง
-  ถ้าบริษัทมีบันทึกการเติมน้ำมัน (ลิตร) จะคำนวณ CO₂e ได้แม่นยำขึ้น
-- **ศักยภาพลดคาร์บอน ≠ คาร์บอนเครดิต** — การขายเป็นคาร์บอนเครดิตต้องขึ้นทะเบียนโครงการ T-VER กับ อบก.
-  มีค่าฐาน (Baseline) และผ่านการตรวจสอบ (Verification) มูลค่าที่แสดงจึงเป็นเพียงประมาณการ
-- แถวเด็กรถ (Helper) ไม่มีค่าน้ำมัน จึงไม่ถูกนับซ้ำ
-""")
-
-st.markdown("#### ตามช่วงกะ")
-s = calc.group_summary(df, "Shift_Group")[["Shift_Group", "Vehicle_Days", "Distance_km", "Fuel_L", "CO2_kg", "CO2_per_km"]]
-s.columns = ["ช่วงกะ", "รถ-วัน", "ระยะทาง (กม.)", "น้ำมัน (ลิตร)", "CO₂e (กก.)", "CO₂e/กม. (กก.)"]
-st.dataframe(s.round(3), hide_index=True, width="stretch")

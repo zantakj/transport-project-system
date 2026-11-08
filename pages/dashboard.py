@@ -2,52 +2,68 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import calculations as calc
-from common import COLORS, PLOT, baht, card, get_data, num, pending_notice, sidebar_filters
+from common import COLORS, PLOT, baht, card, delta, fuel_notice, get_data, num, sidebar_filters, th_month
 
 st.title("📊 ภาพรวมการดำเนินงาน")
-t, daily, p, imports = get_data()
-df, d, month = sidebar_filters(t, daily)
-k = calc.kpis(df, d, p)
-st.caption(f"ข้อมูล: {'ทุกเดือน' if month == 'ทุกเดือน' else month} · {k['days']} วัน · {k['rows']:,} แถว "
-           "(1 แถว = พนักงาน 1 คน ทำงาน 1 วัน)")
+t, o, p = get_data()
+df, do, months, whole = sidebar_filters(t, o)
+k = calc.summarize(df, do, p, months, whole)
+m = calc.monthly(t, o, p)
+prev = None
+if len(months) == 1:
+  i = list(m["Year_Month"]).index(months[0])
+  prev = m.iloc[i - 1] if i > 0 else None
+pv = (lambda key: prev[key]) if prev is not None else (lambda key: None)
 
+st.caption(f"ข้อมูล: {th_month(months[0]) if len(months) == 1 else 'ทุกเดือน'} · {k['days']} วัน · "
+           f"{k['trips']:,} เที่ยว")
+
+st.markdown("##### ด้านการดำเนินงาน")
 c = st.columns(4)
-card(c[0], "🚚 รถที่วิ่งเฉลี่ยต่อวัน", f"{k['active_avg']:,.0f} / {k['fleet']:,.0f} คัน",
-     f"สูงสุด {k['active_max']:,.0f} คัน/วัน")
-card(c[1], "📈 อัตราการใช้รถ", num(k["util"], 1, "%"), "รถที่วิ่ง ÷ รถทั้งหมดของบริษัท", "good")
-card(c[2], "🛣️ ระยะทางรวม", num(k["km"], 0, " กม."), f"{k['trips']:,.0f} เที่ยว · {k['drops']:,.0f} จุดส่ง")
-card(c[3], "🌿 การปล่อย CO₂e", num(k["co2"] / 1000 if k["co2"] else None, 1, " ตัน"),
-     f"น้ำมัน {num(k['fuel_l'], 0, ' ลิตร')}", "good")
+card(c[0], "🧾 จำนวนเที่ยววิ่ง", num(k["trips"], 0, " เที่ยว"), delta(k["trips"], pv("trips")))
+card(c[1], "🛣️ ระยะทางรวม", num(k["km"], 0, " กม."), f"เฉลี่ย {num(k['km_avg'], 2)} กม./เที่ยว")
+card(c[2], "📦 จำนวนจุดส่ง", num(k["drops"], 0, " จุด"), delta(k["drops"], pv("drops")))
+card(c[3], "🚚 รถที่วิ่งเฉลี่ยต่อวัน", f"{num(k['active_avg'], 0)} / {k['fleet']:.0f} คัน",
+     f"อัตราการใช้รถ {num(k['util'], 1, '%')}", "good")
+
+st.markdown("##### ด้านต้นทุนและกำไร")
 c = st.columns(4)
-card(c[0], "💵 รายได้ (ค่าสมมติ)", baht(k["revenue"]),
-     "ค่าเที่ยว × จำนวนเที่ยว" if p.get("trip_price") else "ยังไม่ได้กำหนดค่าเที่ยว", "muted")
-card(c[1], "🧾 ต้นทุนรวม", baht(k["cost"]), f"ตาม E-Billing {baht(k['payment'])}", "warn")
-card(c[2], "💰 กำไรสุทธิ", baht(k["profit"]), "หลังหักต้นทุนรถว่าง " + baht(k["idle"]),
-     "good" if (k["profit"] or 0) >= 0 else "bad")
-card(c[3], "⏱️ OT รวม", num(k["ot"], 0, " ชม."), f"อนุมัติ {num(k['ot_appr'], 0, ' ชม.')}", "warn")
-pending_notice(p)
+card(c[0], "💵 รายได้ (ยอด E-Billing)", baht(k["revenue"]), delta(k["revenue"], pv("revenue")))
+card(c[1], "🧮 ต้นทุนรวม 3 หมวด", baht(k["cost"]), f"{baht(k['cost_trip'])}/เที่ยว · {num(k['cost_km'], 2)} บาท/กม.",
+     "warn")
+card(c[2], "💰 กำไรสุทธิ", baht(k["profit"]), f"อัตรากำไรสุทธิ {num(k['margin'], 1, '%')}",
+     "good" if k["profit"] >= 0 else "bad")
+card(c[3], "⏱️ ชั่วโมงทำงานล่วงเวลา", num(k["ot_hrs"], 0, " ชม."), "ชั่วโมงที่อนุมัติ", "warn")
 
-left, right = st.columns(2)
-with left:
-  st.markdown("#### รถที่วิ่งต่อวัน เทียบกับรถทั้งหมด")
-  fig = go.Figure()
-  fig.add_bar(x=d["Work_Date"], y=d["Active_Vehicles"], name="รถที่วิ่ง", marker_color=COLORS["primary"])
-  fig.add_scatter(x=d["Work_Date"], y=d["Fleet_Total"], name="รถทั้งหมด", mode="lines",
-                  line=dict(color=COLORS["bad"], dash="dash"))
-  fig.update_layout(height=320, yaxis_title="คัน", legend=dict(orientation="h", y=1.12), **PLOT)
-  st.plotly_chart(fig, width="stretch")
-with right:
-  st.markdown("#### ค่าใช้จ่ายตาม E-Billing รายวัน")
-  g = df.groupby("Work_Date")[["Vehicle_Fee", "Fuel_Fee", "OT_Fee", "Incentive"]].sum().reset_index()
-  fig = go.Figure()
-  for col, name, color in [("Vehicle_Fee", "ค่ารถ", "#2563EB"), ("Fuel_Fee", "ค่าน้ำมัน", "#D97706"),
-                           ("OT_Fee", "ค่าโอที", "#DC2626"), ("Incentive", "Incentive", "#16A34A")]:
-    fig.add_bar(x=g["Work_Date"], y=g[col], name=name, marker_color=color)
-  fig.update_layout(barmode="stack", height=320, yaxis_title="บาท", legend=dict(orientation="h", y=1.12), **PLOT)
-  st.plotly_chart(fig, width="stretch")
+st.markdown("##### ด้านเชื้อเพลิงและสิ่งแวดล้อม")
+c = st.columns(4)
+card(c[0], "⛽ ปริมาณเชื้อเพลิง (ประมาณ)", num(k["fuel_l"], 0, " ลิตร"), f"ระยะทาง ÷ {p['km_per_l']:g} กม./ลิตร")
+card(c[1], "💸 ค่าน้ำมัน", baht(k["fuel_cost"]), "ลิตร × ราคาดีเซลเฉลี่ยรายเดือน", "warn")
+card(c[2], "🌿 ก๊าซเรือนกระจก", num(k["co2"] / 1000, 1, " ตัน CO₂e"), f"{num(k['co2_trip'], 2)} กก./เที่ยว", "good")
+card(c[3], "🎯 ศักยภาพลดการปล่อย", num(k["reduction"] / 1000, 2, " ตัน CO₂e"), "จากระยะทางที่เกินแผน", "good")
+fuel_notice(k)
 
-st.markdown("#### การทำงานตามช่วงกะ")
-s = df.groupby("Shift_Group").agg(n=("Username", "size"), ot=("OT_Hrs", "mean"),
-                                  hrs=("Work_Hrs", "mean")).reset_index()
-s.columns = ["ช่วงกะ", "พนักงาน-วัน", "OT เฉลี่ย (ชม./วัน)", "ชั่วโมงทำงานเฉลี่ย (ชม./วัน)"]
-st.dataframe(s.round(2), hide_index=True, width="stretch")
+st.markdown("#### แนวโน้มรายเดือน")
+fig = go.Figure()
+fig.add_bar(x=m["Year_Month"].map(th_month), y=m["revenue"], name="รายได้", marker_color=COLORS["primary"])
+fig.add_bar(x=m["Year_Month"].map(th_month), y=m["cost"], name="ต้นทุนรวม", marker_color=COLORS["muted"])
+fig.add_scatter(x=m["Year_Month"].map(th_month), y=m["profit"], name="กำไรสุทธิ", mode="lines+markers",
+                line=dict(color=COLORS["good"], width=3))
+fig.update_layout(barmode="group", height=360, yaxis_title="บาท", legend=dict(orientation="h", y=1.12), **PLOT)
+st.plotly_chart(fig, width="stretch")
+
+tb = m[["Year_Month", "trips", "km", "active_avg", "util", "revenue", "cost", "profit", "margin", "co2"]].copy()
+for col in ["trips", "revenue", "profit"]:
+  v = list(tb[col])
+  tb[f"{col}_chg"] = [None] + [calc.pct_change(a, b) for a, b in zip(v[1:], v[:-1])]
+tb["Year_Month"] = tb["Year_Month"].map(th_month)
+tb["co2"] = tb["co2"] / 1000
+st.dataframe(tb.rename(columns={
+    "Year_Month": "เดือน", "trips": "เที่ยว", "km": "ระยะทาง (กม.)", "active_avg": "รถที่วิ่ง/วัน",
+    "util": "อัตราการใช้รถ (%)", "revenue": "รายได้", "cost": "ต้นทุนรวม", "profit": "กำไรสุทธิ",
+    "margin": "อัตรากำไร (%)", "co2": "CO₂e (ตัน)", "trips_chg": "เที่ยว เปลี่ยนแปลง (%)",
+    "revenue_chg": "รายได้ เปลี่ยนแปลง (%)", "profit_chg": "กำไร เปลี่ยนแปลง (%)"}).style.format(precision=1,
+                                                                                         thousands=","),
+    hide_index=True, width="stretch")
+st.caption("อัตราการเปลี่ยนแปลง (%) = (ค่าเดือนนี้ − ค่าเดือนก่อน) ÷ ค่าเดือนก่อน × 100 · "
+           "ตารางนี้ใช้ข้อมูลทั้งบริษัท ไม่ขึ้นกับตัวกรองโซน/สาขา")

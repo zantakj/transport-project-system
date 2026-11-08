@@ -1,275 +1,147 @@
 """
-importer.py — อ่านและจัดเตรียมไฟล์ Excel ของบริษัท (ETL: Extract → Transform)
+importer.py — อ่านไฟล์ Excel รายเที่ยว (ตารางที่ 3.3) และตรวจคุณภาพข้อมูลตามตารางที่ 3.2
 
-โครงสร้างไฟล์บริษัท
-  - ชีต "Data Master"  : รายชื่อคนขับประจำ + ทะเบียนรถ + ประเภทตู้
-  - ชีตรายเดือน (เช่น jun26) : 1 แถว = พนักงาน 1 คน (คนขับหรือเด็กรถ) ทำงาน 1 วัน, 45 คอลัมน์
-
-สิ่งที่ทำตอนนำเข้า
-  1) ปรับชื่อคอลัมน์ที่แต่ละเดือนตั้งไม่เหมือนกันให้เป็นชื่อมาตรฐาน
-  2) แก้วันที่ที่สลับวัน/เดือน (เช่น ชีต เม.ย. มีวันที่ 2026-09-04 = 9 เม.ย.)
-  3) ตรวจคุณภาพข้อมูลทีละแถว แล้ว "ทำเครื่องหมาย" ไว้ (ไม่ลบทิ้ง)
-  4) เติมทะเบียนรถจาก Data Master เท่าที่จับคู่ได้
-  5) ปกปิดข้อมูลส่วนบุคคล: ตัดชื่อ-นามสกุลและเบอร์โทรออก ใช้รหัสพนักงาน (Username) แทน
+ไฟล์นำเข้า (ผลจากการแปลงข้อมูลรายวันของบริษัทเป็นรายเที่ยว ตามหัวข้อ 3.4.4)
+  ชีต Trips            1 แถว = 1 เที่ยววิ่ง  (จำเป็น)
+  ชีต Other_Billing    รายการเรียกเก็บเงินที่ไม่ผูกกับเที่ยววิ่ง  (ถ้ามี — ตัดแถว Helper ออก)
+  ชีต Data_Quality_Log บันทึกการจัดการข้อมูลตอนแปลง  (ถ้ามี — แสดงในหน้าตรวจคุณภาพข้อมูล)
 """
-import hashlib
 import re
 
 import numpy as np
 import pandas as pd
 
-MONTHS = {m: i for i, m in enumerate(
-    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+REQUIRED = ["Trip_ID", "Trip_Date", "Driver_Code", "Branch_Code", "Zone", "Distance_km", "Planned_Distance_km",
+            "Drops", "Revenue_THB", "Driver_Wage_THB", "OT_Approved_Hours", "EBilling_Status"]
+OPTIONAL = ["Trips_That_Day", "Fuel_Liters", "Distance_Source", "Source_Sheet", "Source_Row"]
+OTHER_COLS = ["Date", "Person_Code", "Position", "Branch_Code", "Zone", "Reason", "Revenue_THB",
+              "Driver_Wage_THB", "OT_Approved_Hours", "EBilling_Status", "Source_Sheet", "Source_Row"]
+MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
+                                      "dec"], 1)}
 
-# ชื่อคอลัมน์มาตรฐาน ← ชื่อที่พบในไฟล์บริษัท (ตัดช่องว่าง/ขึ้นบรรทัดใหม่ และเป็นตัวพิมพ์เล็กแล้ว)
-ALIASES = {
-    "Work_Date": ["date"],
-    "Booking_Raw": ["booking_id clock out", "booking_id"],
-    "Rate_Card": ["rate_card"],
-    "Store": ["st."],
-    "Zone": ["zone"],
-    "Username": ["username"],
-    "First_Name": ["ชื่อ"],
-    "Last_Name": ["นามสกุล"],
-    "Position": ["position"],
-    "Supervisor": ["sup"],
-    "Shift_In": ["shift in"],
-    "Shift_Out": ["shift out"],
-    "Punch_In": ["punch in"],
-    "Punch_Out": ["punch out"],
-    "OT_Hrs": ["over time (hrs)"],
-    "OT_Request_Hrs": ["over time request (hrs)"],
-    "OT_Approved_Hrs": ["over_time_approve_hours"],
-    "Trips": ["จำนวนเที่ยวทั้งหมด"],
-    "Drops": ["จำนวนจุดส่งทั้งหมด"],
-    "Mileage_In": ["mileage in"],
-    "Mileage_Out": ["mileage out"],
-    "Odometer_km": ["ระยะทางรวม (เลิกงาน - เข้างาน)"],
-    "Trips_TMS": ["trip_tms"],
-    "Drops_TMS": ["drop_tms"],
-    "Orders": ["order"],
-    "Planned_km": ["planned_distance"],
-    "Actual_km": ["actual_distance"],
-    "Baseline_km": ["distance_baseline"],
-    "Paid_km": ["paid_distance"],
-    "Equivalent_Drop": ["equivalent drop"],
-    "Remark": ["หมายเหตุ"],
-    "Vehicle_Fee": ["ค่ารถ"],
-    "Fuel_Fee": ["ค่าน้ำมัน"],
-    "OT_Fee": ["ค่าโอที"],
-    "Incentive": ["incentive"],
-    "Night_Load": ["night load", "night_load"],
-    "Other_Exp_VAT": ["others_expense_vat"],
-    "Other_Exp_NonVAT": ["others_expense_non_vat"],
-    "Exp_VAT": ["expense_vat"],
-    "Exp_NonVAT": ["expense_non_vat"],
-    "Penalty": ["penalty_fine"],
-    "Early_Shift_Fee": ["ค่าตารางกะเช้าตรู่", "early_cost"],
-    "Incentive_Monthly": ["incentive_monthly"],
-    "Total_Payment": ["ยอดรวมทั้งหมด"],
-    "EBilling_Status": ["e-billing"],
-}
-NUMERIC = ["OT_Hrs", "OT_Request_Hrs", "OT_Approved_Hrs", "Trips", "Drops", "Mileage_In", "Mileage_Out",
-           "Odometer_km", "Trips_TMS", "Drops_TMS", "Orders", "Planned_km", "Actual_km", "Baseline_km",
-           "Paid_km", "Equivalent_Drop", "Vehicle_Fee", "Fuel_Fee", "OT_Fee", "Incentive", "Night_Load",
-           "Other_Exp_VAT", "Other_Exp_NonVAT", "Exp_VAT", "Exp_NonVAT", "Penalty", "Early_Shift_Fee",
-           "Incentive_Monthly"]
-# องค์ประกอบของยอดรวมทั้งหมด (ค่าปรับบันทึกเป็นค่าติดลบในไฟล์)
-PAYMENT_PARTS = ["Vehicle_Fee", "Fuel_Fee", "OT_Fee", "Incentive", "Night_Load", "Other_Exp_VAT",
-                 "Other_Exp_NonVAT", "Exp_VAT", "Exp_NonVAT", "Early_Shift_Fee", "Incentive_Monthly", "Penalty"]
-VALID_ZONES = {"BKK", "UPC", "MainUPC"}
-MAX_DAILY_KM = 1000  # ระยะทางต่อวันเกินค่านี้ถือว่าผิดปกติ (รถ 4 ล้อในเมือง)
+MAX_DROPS = 100  # จุดส่งต่อเที่ยวสูงสุดที่สมเหตุสมผลสำหรับรถ 4 ล้อ (ข้อมูลจริง 99.9% ไม่เกิน 37 จุด)
 
-# ประเภทปัญหาคุณภาพข้อมูล: รหัส → (คำอธิบาย, มิติคุณภาพตามบทที่ 2)
+# รหัสปัญหา: (คำอธิบาย, มิติคุณภาพตามตารางที่ 3.2, ผลต่อการคำนวณ)
 FLAGS = {
-    "DATE_FIXED": ("วันที่สลับวัน/เดือน (แก้ให้แล้ว)", "ความสอดคล้อง"),
-    "DATE_INVALID": ("วันที่ไม่อยู่ในเดือนของชีต", "ความสมเหตุสมผล"),
-    "NO_BOOKING": ("ไม่มีเลข Booking", "ความครบถ้วน"),
-    "DUP_BOOKING": ("Booking ซ้ำ (บริษัทระบุว่าซ้ำ)", "ความไม่ซ้ำซ้อน"),
-    "NO_CLOCKOUT": ("คนขับไม่กด Clock OUT", "ความครบถ้วน"),
-    "DUP_PERSON_DAY": ("พนักงานคนเดียวมีหลายแถวในวันเดียวกัน", "ความไม่ซ้ำซ้อน"),
-    "TOTAL_TEXT": ("ยอดรวมไม่ใช่ตัวเลข (เช่น \"-\")", "ความสมเหตุสมผล"),
-    "TOTAL_MISMATCH": ("ยอดรวมไม่เท่ากับผลรวมค่าใช้จ่ายย่อย", "ความถูกต้อง"),
-    "EBILL_NOT_APPROVED": ("E-Billing ยังไม่อนุมัติ/ว่าง", "ความครบถ้วน"),
-    "ZONE_INVALID": ("ZONE ผิดรูปแบบ (เช่น 0)", "ความสมเหตุสมผล"),
-    "STORE_INVALID": ("สาขาว่างหรือผิดรูปแบบ", "ความสมเหตุสมผล"),
-    "DIST_OUTLIER": (f"ระยะทางผิดปกติ (> {MAX_DAILY_KM:,} กม./วัน หรือติดลบ)", "ค่าผิดปกติ"),
-    "SHIFT_MISSING": ("ไม่มีเวลาเข้า-ออกกะ", "ความครบถ้วน"),
-    "NOT_IN_MASTER": ("คนขับไม่อยู่ใน Data Master (ไม่ทราบทะเบียนรถ)", "ความครบถ้วน"),
+    "MISSING_KEY": ("ไม่มีวันที่ รหัสพนักงานขับรถ หรือรหัสสาขา", "ความครบถ้วน", "ไม่นำเข้า"),
+    "NO_DISTANCE": ("ไม่มีระยะทาง", "ความครบถ้วน", "ไม่ใช้คำนวณน้ำมันและคาร์บอน"),
+    "DIST_REPLACED": ("ระยะทางจริงว่างหรือผิดปกติ ใช้ระยะจากเลขไมล์แทน", "ความครบถ้วน", "ใช้ค่าทดแทน"),
+    "NO_PLAN": ("ไม่มีระยะทางตามแผน", "ความครบถ้วน", "ไม่ใช้คำนวณศักยภาพลดการปล่อย"),
+    "DUP_TRIP": ("รหัสเที่ยววิ่ง (Trip_ID) ซ้ำ", "ความไม่ซ้ำซ้อน", "ตัดรายการซ้ำออก"),
+    "ZONE_INVALID": ("รหัสโซนไม่ถูกต้อง เช่น 0", "ความสมเหตุสมผล", "แสดงเป็นโซน 'ไม่ระบุ'"),
+    "NEG_VALUE": ("ระยะทางหรือจุดส่งติดลบ", "ความสมเหตุสมผล", "ทำเครื่องหมายไว้"),
+    "DROPS_INVALID": (f"จุดส่งต่อเที่ยวเกิน {MAX_DROPS} จุด (น่าจะบันทึกผิด)", "ความสมเหตุสมผล",
+                      "ไม่ใช้คำนวณตัวชี้วัดด้านจุดส่ง"),
+    "ZONE_SPELLING": ("ชื่อโซนสะกดไม่ตรงกัน เช่น Main UPC / MainUPC", "ความสอดคล้อง", "ปรับเป็นชื่อเดียวกัน"),
+    "ZERO_BILLING": ("มีเที่ยววิ่งแต่ยอด E-Billing เป็น 0", "ความถูกต้อง", "นับรายได้ = 0"),
+    "EBILL_PENDING": ("E-Billing ยังไม่อนุมัติ", "ความเป็นปัจจุบัน", "นับเป็นรายได้ตามที่บริษัทยืนยัน"),
+    "DIST_OUTLIER": ("ระยะทางต่อเที่ยวสูงผิดปกติ (เกิน Q3 + 1.5×IQR)", "ค่าผิดปกติ", "ทำเครื่องหมายไว้ ไม่ตัดออก"),
 }
-
-
-def _norm(s):
-  return re.sub(r"\s+", " ", str(s)).strip().lower()
 
 
 def sheet_year_month(name):
-  """'jun26' → '2026-06' ถ้าไม่ใช่ชีตรายเดือนคืน None"""
-  m = re.fullmatch(r"([a-z]{3})(\d{2})", name.strip().lower())
-  if not m or m.group(1) not in MONTHS:
+  """'Jun26' -> '2026-06'"""
+  m = re.fullmatch(r"([A-Za-z]{3})[a-z]*\s*(\d{2})", str(name).strip())
+  if not m or m.group(1).lower() not in MONTHS:
     return None
-  return f"20{m.group(2)}-{MONTHS[m.group(1)]:02d}"
+  return f"20{m.group(2)}-{MONTHS[m.group(1).lower()]:02d}"
 
 
-def fingerprint(df):
-  """ลายนิ้วมือของข้อมูล ใช้ตรวจว่าชีตสองชีตเป็นข้อมูลชุดเดียวกันหรือไม่"""
-  raw = df.dropna(how="all").to_csv(index=False).encode("utf-8")
-  return hashlib.sha1(raw).hexdigest()
+def _text(s):
+  """แปลงเป็นข้อความ (object) โดยค่าว่างเป็น None — เลี่ยงปัญหา NA ของ pandas"""
+  return s.map(lambda x: None if pd.isna(x) or str(x).strip() == "" else str(x).strip()).astype(object)
 
 
-def list_month_sheets(sheets):
-  """สรุปชีตรายเดือนในไฟล์ พร้อมตรวจชีตที่ซ้ำกันทั้งชีต"""
-  rows, seen = [], {}
-  for name, df in sheets.items():
-    ym = sheet_year_month(name)
-    if ym is None:
-      continue
-    fp = fingerprint(df)
-    rows.append(dict(sheet=name, year_month=ym, rows=len(df.dropna(how="all")),
-                     fingerprint=fp, duplicate_of=seen.get(fp)))
-    seen.setdefault(fp, name)
-  return rows
+def _norm_zone(z):
+  return re.sub(r"\s+", "", str(z)).upper()
 
 
-def rename_columns(df):
-  """คืน (df ที่เปลี่ยนชื่อคอลัมน์แล้ว, รายการคอลัมน์ที่หาไม่เจอ)"""
-  lookup = {a: canon for canon, al in ALIASES.items() for a in al}
-  mapping = {c: lookup[_norm(c)] for c in df.columns if _norm(c) in lookup}
-  out = df.rename(columns=mapping)
-  missing = [c for c in ALIASES if c not in out.columns]
-  return out[[c for c in ALIASES if c in out.columns]], missing
-
-
-def _to_minutes(v):
-  """เวลา (time / datetime / 'HH:MM') → นาทีนับจากเที่ยงคืน"""
-  if v is None or (isinstance(v, float) and np.isnan(v)):
-    return np.nan
-  if hasattr(v, "hour"):
-    return v.hour * 60 + v.minute
-  m = re.match(r"^\s*(\d{1,2}):(\d{2})", str(v))
-  return int(m.group(1)) * 60 + int(m.group(2)) if m else np.nan
-
-
-def _fmt_minutes(m):
-  return "" if pd.isna(m) else f"{int(m) // 60:02d}:{int(m) % 60:02d}"
-
-
-def parse_master(df):
-  """ชีต Data Master → ตารางทะเบียนรถ (ใช้ Username และเลข Booking เป็นกุญแจ)"""
-  if df is None or df.empty:
-    return pd.DataFrame(columns=["Username", "Booking", "Plate", "Box_Type", "Master_Store"])
-  m = pd.DataFrame({
-      "Username": df.get("Frog Username"),
-      "Booking": df.get("Booking"),
-      "Plate": df.get("ทะเบียน").fillna("").astype(str).str.replace(r"\s+", "", regex=True),
-      "Box_Type": df.get("ชนิด").fillna("").astype(str).str.strip().str.title(),
-      "Master_Store": df.get("Store"),
-  })
-  m = m[m["Plate"] != ""]
-  return m.drop_duplicates()
-
-
-def clean_month(raw, year_month, master=None):
-  """แปลงชีตรายเดือนเป็นตารางมาตรฐาน + คอลัมน์ Flags (รหัสปัญหาคั่นด้วย ,)"""
-  df, missing = rename_columns(raw.dropna(how="all"))
+def read_trips(sheets):
+  """คืน (trips, other, qlog, missing_columns) จาก dict ของชีต"""
+  name = next((s for s in sheets if s.strip().lower() == "trips"), None)
+  if name is None:
+    return None, None, None, ["ชีต Trips"]
+  raw = sheets[name]
+  missing = [c for c in REQUIRED if c not in raw.columns]
   if missing:
-    raise ValueError("ไม่พบคอลัมน์: " + ", ".join(missing))
-  df = df.reset_index(drop=True).copy()
-  flags = [[] for _ in range(len(df))]
+    return None, None, None, missing
+  keep = REQUIRED + [c for c in OPTIONAL if c in raw.columns]
+  t = raw[keep].copy()
+  t["Trip_Date"] = pd.to_datetime(t["Trip_Date"], errors="coerce")
+  for c in ["Distance_km", "Planned_Distance_km", "Drops", "Revenue_THB", "Driver_Wage_THB", "OT_Approved_Hours",
+            "Trips_That_Day"]:
+    if c in t:
+      t[c] = pd.to_numeric(t[c], errors="coerce")
+  for c in ["Trip_ID", "Driver_Code", "Branch_Code", "Zone", "EBilling_Status", "Distance_Source", "Source_Sheet",
+            "Source_Row"]:
+    if c in t:
+      t[c] = _text(t[c])
 
-  def flag(mask, code):
-    for i in np.flatnonzero(np.asarray(mask, dtype=bool)):
-      flags[i].append(code)
+  flags = pd.DataFrame(False, index=t.index, columns=list(FLAGS))
+  flags["MISSING_KEY"] = t["Trip_Date"].isna() | t["Driver_Code"].isna() | t["Branch_Code"].isna()
+  flags["NO_DISTANCE"] = t["Distance_km"].isna()
+  if "Distance_Source" in t:
+    flags["DIST_REPLACED"] = t["Distance_Source"].fillna("").str.contains("mileage")
+  flags["NO_PLAN"] = t["Planned_Distance_km"].isna() | (t["Planned_Distance_km"] <= 0)
+  flags["DUP_TRIP"] = t["Trip_ID"].duplicated(keep="first")
+  zone = t["Zone"].fillna("")
+  bad_zone = ~zone.str.fullmatch(r"[A-Za-z ]+")
+  flags["ZONE_INVALID"] = bad_zone
+  norm = zone.map(_norm_zone)
+  canon = zone[~bad_zone].groupby(norm[~bad_zone]).agg(lambda s: s.value_counts().index[0])
+  std = norm.map(canon)
+  flags["ZONE_SPELLING"] = ~bad_zone & std.notna() & (std != zone)
+  flags["NEG_VALUE"] = (t["Distance_km"] < 0) | (t["Drops"] < 0)
+  flags["DROPS_INVALID"] = t["Drops"] > MAX_DROPS
+  flags["ZERO_BILLING"] = t["Revenue_THB"].fillna(0) == 0
+  flags["EBILL_PENDING"] = t["EBilling_Status"].fillna("").str.lower() != "approved"
+  q1, q3 = t["Distance_km"].quantile([.25, .75])
+  flags["DIST_OUTLIER"] = t["Distance_km"] > q3 + 1.5 * (q3 - q1)
 
-  # ---------- วันที่ ----------
-  y, mth = int(year_month[:4]), int(year_month[5:])
-  d = pd.to_datetime(df["Work_Date"], errors="coerce")
-  swap = d.notna() & (d.dt.month != mth) & (d.dt.day == mth) & (d.dt.month <= 31)
-  fixed = pd.to_datetime(dict(year=y, month=mth, day=d.dt.month.where(swap, 1)), errors="coerce")
-  d = d.where(~swap, fixed)
-  flag(swap, "DATE_FIXED")
-  bad_date = d.isna() | (d.dt.month != mth) | (d.dt.year != y)
-  flag(bad_date, "DATE_INVALID")
-  df["Work_Date"] = d.dt.normalize()
-  df["Year_Month"] = year_month
+  t["Drops_Raw"] = t["Drops"]
+  t.loc[flags["DROPS_INVALID"], "Drops"] = np.nan  # ไม่นำไปรวมจำนวนจุดส่ง (หัวข้อ 3.4.3 ข้อ 1)
+  t["Zone"] = np.where(bad_zone, "ไม่ระบุ", std.fillna(zone))
+  t["Flags"] = flags.apply(lambda r: " ".join(c for c in FLAGS if r[c]), axis=1)
+  t = t[~flags["MISSING_KEY"] & ~flags["DUP_TRIP"]].copy()
+  t["Year_Month"] = t["Trip_Date"].dt.strftime("%Y-%m")
+  t.attrs["dropped"] = {"MISSING_KEY": int(flags["MISSING_KEY"].sum()), "DUP_TRIP": int(flags["DUP_TRIP"].sum())}
 
-  # ---------- ตัวเลข ----------
-  total_num = pd.to_numeric(df["Total_Payment"], errors="coerce")
-  flag(total_num.isna(), "TOTAL_TEXT")
-  for c in NUMERIC:
-    df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-  df["Total_Payment"] = total_num.fillna(0.0)
-  parts = df[PAYMENT_PARTS].sum(axis=1)
-  flag(total_num.notna() & ((parts - total_num).abs() > 0.05), "TOTAL_MISMATCH")
+  other = pd.DataFrame(columns=OTHER_COLS + ["Year_Month"])
+  oname = next((s for s in sheets if s.strip().lower() == "other_billing"), None)
+  if oname is not None:
+    o = sheets[oname]
+    o = o[[c for c in OTHER_COLS + ["Month"] if c in o.columns]].copy()
+    if "Position" in o:
+      o = o[o["Position"].fillna("").astype(str) != "Helper"]  # ไม่รวม Helper ตามที่บริษัทกำหนด
+    o["Year_Month"] = _text(o["Month"]) if "Month" in o else pd.to_datetime(o["Date"]).dt.strftime("%Y-%m")
+    o = o.drop(columns=[c for c in ["Month"] if c in o])
+    for c in ["Revenue_THB", "Driver_Wage_THB", "OT_Approved_Hours"]:
+      o[c] = pd.to_numeric(o.get(c), errors="coerce").fillna(0)
+    for c in ["Person_Code", "Position", "Branch_Code", "Zone", "Reason", "EBilling_Status", "Source_Sheet",
+              "Source_Row"]:
+      if c in o:
+        o[c] = _text(o[c])
+    if "Date" in o:
+      o["Date"] = pd.to_datetime(o["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    other = o
 
-  # ---------- ข้อความ: แทนค่าว่างด้วย "" ก่อน (pandas 3 เก็บค่าว่างเป็น NaN แม้แปลงเป็น str) ----------
-  for c in ["Booking_Raw", "Rate_Card", "Store", "Zone", "Username", "Position", "Supervisor", "Remark",
-            "EBilling_Status"]:
-    df[c] = df[c].fillna("").astype(str).replace("nan", "")
-
-  # ---------- Booking / สถานะ ----------
-  b = df["Booking_Raw"]
-  df["Booking"] = b.str.extract(r"(B\d+_\d+)")[0]
-  flag(df["Booking"].isna(), "NO_BOOKING")
-  flag(b.str.contains("ซ้ำ"), "DUP_BOOKING")
-  flag(b.str.contains("Clock OUT", case=False), "NO_CLOCKOUT")
-  df["EBilling_Status"] = df["EBilling_Status"].str.strip().str.lower().replace({"-": ""})
-  flag(df["EBilling_Status"] != "approved", "EBILL_NOT_APPROVED")
-
-  # ---------- รหัส/ชื่อ ----------
-  df["Zone"] = df["Zone"].astype(str).str.replace(" ", "").str.strip()
-  df.loc[df["Zone"].str.upper() == "MAINUPC", "Zone"] = "MainUPC"
-  flag(~df["Zone"].isin(VALID_ZONES), "ZONE_INVALID")
-  df["Store"] = df["Store"].astype(str).str.strip()
-  flag(~df["Store"].str.match(r"^ST\.\d+"), "STORE_INVALID")
-  df["Position"] = df["Position"].astype(str).str.strip().str.title()
-  df["Supervisor"] = df["Supervisor"].astype(str).str.upper()
-  df["Username"] = df["Username"].astype(str).str.strip()
-  dup = df.duplicated(["Work_Date", "Username"], keep=False)
-  flag(dup, "DUP_PERSON_DAY")
-
-  # ---------- ระยะทาง ----------
-  out = (df["Actual_km"] > MAX_DAILY_KM) | (df["Actual_km"] < 0) | (df["Odometer_km"] > MAX_DAILY_KM)
-  flag(out, "DIST_OUTLIER")
-  df["Distance_km"] = df["Actual_km"].where(~out, np.nan)  # ระยะทางที่ใช้คำนวณ (actual_distance)
-
-  # ---------- เวลา ----------
-  for c in ["Shift_In", "Shift_Out", "Punch_In", "Punch_Out"]:
-    df[c + "_min"] = df[c].map(_to_minutes)
-    df[c] = df[c + "_min"].map(_fmt_minutes)
-  flag(df["Shift_In_min"].isna() | df["Punch_In_min"].isna(), "SHIFT_MISSING")
-  work = df["Punch_Out_min"] - df["Punch_In_min"]
-  df["Work_Hrs"] = (work.where(work >= 0, work + 24 * 60)) / 60  # กะข้ามเที่ยงคืน
-
-  # ---------- ทะเบียนรถจาก Data Master ----------
-  df["Plate"], df["Box_Type"] = np.nan, np.nan
-  if master is not None and not master.empty:
-    by_user = master.drop_duplicates("Username").set_index("Username")
-    by_book = master.drop_duplicates("Booking").set_index("Booking")
-    df["Plate"] = df["Username"].map(by_user["Plate"]).fillna(df["Booking"].map(by_book["Plate"]))
-    df["Box_Type"] = df["Username"].map(by_user["Box_Type"]).fillna(df["Booking"].map(by_book["Box_Type"]))
-  is_driver = df["Position"].eq("Driver")
-  flag(is_driver & df["Plate"].isna(), "NOT_IN_MASTER")
-  df["Box_Type"] = df["Box_Type"].where(is_driver, "Helper").fillna("ไม่ทราบ")
-
-  df["Flags"] = [",".join(f) for f in flags]
-  # ปกปิดข้อมูลส่วนบุคคล (PDPA): ไม่เก็บชื่อ-นามสกุลลงฐานข้อมูล
-  return df.drop(columns=["First_Name", "Last_Name"])
+  qlog = pd.DataFrame()
+  lname = next((s for s in sheets if s.strip().lower() == "data_quality_log"), None)
+  if lname is not None:
+    q = sheets[lname].apply(_text)
+    if {"Month", "Issue", "Action"} <= set(q.columns):
+      q["Year_Month"] = q["Month"].map(sheet_year_month)
+      qlog = q.dropna(subset=["Year_Month"])
+  return t, other, qlog, []
 
 
-def quality_summary(df):
-  """จำนวนแถวที่พบปัญหาแต่ละประเภท"""
+def quality_summary(t):
+  """สรุปจำนวนเที่ยวที่พบปัญหาแต่ละประเภท"""
   rows = []
-  for code, (desc, dim) in FLAGS.items():
-    n = int(df["Flags"].str.contains(rf"\b{code}\b", regex=True).sum())
-    # ใช้ dict literal เพราะชื่อ kwargs ภาษาไทยถูก Python แปลงรูป (NFKC) เช่น "ำ"
-    rows.append({"รหัส": code, "ปัญหา": desc, "มิติคุณภาพ": dim, "จำนวนแถว": n,
-                 "ร้อยละ": round(n / len(df) * 100, 2) if len(df) else 0})
+  for code, (label, dim, action) in FLAGS.items():
+    if code in ("MISSING_KEY", "DUP_TRIP"):
+      n = t.attrs.get("dropped", {}).get(code, 0)
+    else:
+      n = int(t["Flags"].str.contains(rf"\b{code}\b").sum())
+    rows.append({"มิติคุณภาพ": dim, "ปัญหา": label, "จำนวนเที่ยว": n, "การจัดการ": action, "รหัส": code})
   return pd.DataFrame(rows)
-
-
-def mask_plate(p):
-  """แสดงทะเบียนรถแบบปกปิด 2 หลักท้าย เช่น ฒร8878 → ฒร88xx"""
-  if not isinstance(p, str) or not p or p == "nan":
-    return "ไม่พบใน Master"
-  return p[:-2] + "xx" if len(p) > 2 else "xx"

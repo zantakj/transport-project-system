@@ -2,51 +2,52 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-import importer as im
-from common import COLORS, PLOT, get_data, num, sidebar_filters, to_display
+import calculations as calc
+from common import COLORS, PLOT, card, get_data, num, sidebar_filters
 
 st.title("🚚 ยานพาหนะ")
-t, daily, p, imports = get_data()
-df, d, month = sidebar_filters(t, daily, positions=False)
-drv = df[df["Position"] == "Driver"]
+st.caption("ข้อมูลไม่มีทะเบียนรถ จึงนับจำนวนรถที่วิ่งต่อวันจากรหัสพนักงานขับรถที่ไม่ซ้ำกันในแต่ละวัน "
+           "(ถือว่าพนักงานขับรถ 1 คนขับรถ 1 คันต่อวัน)")
+t, o, p = get_data()
+df, do, months, whole = sidebar_filters(t, o)
+d = calc.daily(df, p)
 
 c = st.columns(4)
-c[0].metric("รถที่วิ่งเฉลี่ยต่อวัน", num(d["Active_Vehicles"].mean(), 0, " คัน"))
-c[1].metric("รถทั้งหมดของบริษัท", num(d["Fleet_Total"].max(), 0, " คัน"),
-            help="กรอกตอนนำเข้าข้อมูลแต่ละเดือน (ค่าสมมติ 173 คัน รอบริษัทยืนยัน)")
-c[2].metric("อัตราการใช้รถเฉลี่ย", num(d["Utilization"].mean(), 1, "%"))
-vd = drv["Vehicle_Day"].sum()
-c[3].metric("ระยะทางเฉลี่ยต่อคันต่อวัน", num(drv["Distance_km"].sum() / vd if vd else None, 1, " กม."))
+card(c[0], "รถทั้งหมด", f"{p['fleet_total']:.0f} คัน", "ตั้งค่าไว้ในระบบ (ไม่ต้องกรอกทุกครั้ง)", "muted")
+card(c[1], "รถที่วิ่งเฉลี่ยต่อวัน", num(d["Active"].mean(), 1, " คัน"),
+     f"ต่ำสุด {num(d['Active'].min())} · สูงสุด {num(d['Active'].max())} คัน")
+card(c[2], "อัตราการใช้รถเฉลี่ย", num(d["Utilization"].mean(), 1, "%"), "รถที่วิ่ง ÷ รถทั้งหมด × 100", "good")
+card(c[3], "ระยะทางต่อคันต่อวัน", num(d["km_per_vehicle"].mean(), 1, " กม."), "ระยะทางรวม ÷ รถที่วิ่ง")
+if not whole:
+  st.info("กรองโซน/สาขาอยู่ — อัตราการใช้รถยังเทียบกับรถทั้งหมดของบริษัท จึงต่ำกว่าภาพรวม")
 
-st.markdown("#### อัตราการใช้รถรายวัน")
+st.markdown("#### จำนวนรถที่วิ่งต่อวัน เทียบกับรถทั้งหมด")
 fig = go.Figure()
-fig.add_scatter(x=d["Work_Date"], y=d["Utilization"], mode="lines+markers", name="อัตราการใช้รถ",
-                line_color=COLORS["primary"])
-fig.add_hline(y=100, line_dash="dash", line_color=COLORS["bad"])
-fig.update_layout(height=300, yaxis_title="%", yaxis_range=[0, 110], **PLOT)
+fig.add_bar(x=d["Trip_Date"], y=d["Active"], name="รถที่วิ่ง", marker_color=COLORS["primary"])
+fig.add_hline(y=p["fleet_total"], line_dash="dash", line_color=COLORS["bad"],
+              annotation_text=f"รถทั้งหมด {p['fleet_total']:.0f} คัน")
+fig.update_layout(height=340, yaxis_title="คัน", **PLOT)
 st.plotly_chart(fig, width="stretch")
-st.caption("วิธีนับ: รถที่วิ่งในวันนั้น = จำนวนคนขับ (Position = Driver) ที่ไม่ซ้ำกันในวันนั้น "
-           "เพราะคนขับหมุนเวียนกันตลอดเดือน จึงนับเป็นรายวัน ไม่ใช่รายเดือน")
 
 left, right = st.columns(2)
 with left:
-  st.markdown("#### ระยะทางต่อคันต่อวัน (การกระจาย)")
-  fig = px.histogram(drv[drv["Distance_km"] > 0], x="Distance_km", nbins=40, color_discrete_sequence=[COLORS["primary"]])
-  fig.update_layout(height=300, xaxis_title="กม./วัน", yaxis_title="จำนวนรถ-วัน", **PLOT)
+  st.markdown("#### อัตราการใช้รถรายวัน (%)")
+  fig = px.line(d, x="Trip_Date", y="Utilization", markers=True)
+  fig.update_layout(height=300, xaxis_title="", yaxis_title="%", **PLOT)
   st.plotly_chart(fig, width="stretch")
 with right:
-  st.markdown("#### ตามประเภทตู้ (จาก Data Master)")
-  b = drv.groupby("Box_Type").agg(รถ_วัน=("Vehicle_Day", "sum"), ระยะทาง=("Distance_km", "sum")).reset_index()
-  b.columns = ["ประเภทตู้", "รถ-วัน", "ระยะทาง (กม.)"]
-  st.dataframe(b, hide_index=True, width="stretch")
-  st.caption(f"แถวคนขับที่พบทะเบียนรถใน Data Master: {drv['Plate'].notna().mean() * 100:.0f}% "
-             "— แถวที่เหลือแสดงเป็น 'ไม่ทราบ' จนกว่าบริษัทจะส่งรายชื่อรถครบทุกคัน")
+  st.markdown("#### เฉลี่ยตามวันในสัปดาห์")
+  names = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
+  w = d.assign(wd=d["Trip_Date"].dt.dayofweek).groupby("wd")[["Active", "Trips"]].mean().reindex(range(7))
+  w.index = names
+  fig = go.Figure()
+  fig.add_bar(x=w.index, y=w["Active"], name="รถที่วิ่ง (คัน)", marker_color=COLORS["primary"])
+  fig.add_bar(x=w.index, y=w["Trips"], name="เที่ยววิ่ง", marker_color=COLORS["muted"])
+  fig.update_layout(barmode="group", height=300, legend=dict(orientation="h", y=1.15), **PLOT)
+  st.plotly_chart(fig, width="stretch")
 
-st.markdown("#### สรุปรายทะเบียนรถ (เฉพาะที่พบใน Data Master)")
-pl = (drv[drv["Plate"].notna()].groupby("Plate")
-      .agg(Vehicle_Days=("Vehicle_Day", "sum"), Trips=("Trips", "sum"), Drops=("Drops", "sum"),
-           Distance_km=("Distance_km", "sum"), Fuel_L=("Fuel_L", "sum"), CO2_kg=("CO2_kg", "sum"))
-      .reset_index().sort_values("Distance_km", ascending=False))
-pl.insert(0, "Plate_Masked", pl.pop("Plate").map(im.mask_plate))
-st.dataframe(to_display(pl).round(1), hide_index=True, width="stretch")
-st.caption(f"พบทะเบียนรถไม่ซ้ำกัน {len(pl)} คัน จาก Data Master")
+st.markdown("#### สรุปรายวัน")
+st.dataframe(d.assign(Trip_Date=d["Trip_Date"].dt.strftime("%Y-%m-%d")).rename(columns={
+    "Trip_Date": "วันที่", "Trips": "เที่ยววิ่ง", "Active": "รถที่วิ่ง (คัน)", "km": "ระยะทาง (กม.)",
+    "Utilization": "อัตราการใช้รถ (%)", "km_per_vehicle": "กม./คัน/วัน"}).style.format(precision=1, thousands=","),
+    hide_index=True, width="stretch")

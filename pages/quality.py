@@ -1,37 +1,58 @@
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
+import database as db
 import importer as im
-from common import PLOT, get_data, to_display
+from common import PLOT, get_data, th_month, to_display
 
 st.title("🧪 ตรวจคุณภาพข้อมูล")
-st.caption("ผลตรวจตามมิติคุณภาพข้อมูล (ความครบถ้วน ความถูกต้อง ความสอดคล้อง ความสมเหตุสมผล ความไม่ซ้ำซ้อน ค่าผิดปกติ) "
-           "— แถวที่มีปัญหาถูกทำเครื่องหมายไว้ ไม่ได้ลบทิ้ง")
+st.caption("ผลตรวจตามเกณฑ์ในตารางที่ 3.2 — รายการที่พบปัญหาถูกทำเครื่องหมายไว้ ไม่ได้ลบทิ้ง "
+           "และไม่นำไปคำนวณเฉพาะตัวชี้วัดที่ได้รับผลกระทบ")
 
-t, daily, p, imports = get_data()
+t, o, p = get_data()
 months = sorted(t["Year_Month"].unique())
-month = st.selectbox("เดือน", months, index=len(months) - 1)
-df = t[t["Year_Month"] == month]
+month = st.selectbox("เดือน", ["ทุกเดือน"] + months, index=0, format_func=th_month)
+df = t if month == "ทุกเดือน" else t[t["Year_Month"] == month]
 
 q = im.quality_summary(df)
-clean = (df["Flags"].isin(["", "NOT_IN_MASTER"])).mean() * 100
+q = q[~q["รหัส"].isin(["MISSING_KEY", "DUP_TRIP"])]  # ไม่มีวันที่/รหัสซ้ำ ถูกคัดออกตั้งแต่ตอนนำเข้า
+clean = (df["Flags"] == "").mean() * 100
 c = st.columns(3)
-c[0].metric("จำนวนแถวทั้งหมด", f"{len(df):,}")
-c[1].metric("แถวที่ไม่พบปัญหา", f"{clean:.1f}%", help="ไม่นับกรณีคนขับไม่อยู่ใน Data Master ซึ่งเป็นข้อจำกัดของชีต Master")
-c[2].metric("ประเภทปัญหาที่พบ", f"{(q['จำนวนแถว'] > 0).sum()} ประเภท")
+c[0].metric("จำนวนเที่ยวทั้งหมด", f"{len(df):,}")
+c[1].metric("เที่ยวที่ไม่พบปัญหา", f"{clean:.1f}%")
+c[2].metric("ประเภทปัญหาที่พบ", f"{(q['จำนวนเที่ยว'] > 0).sum()} ประเภท")
 
-found = q[q["จำนวนแถว"] > 0].sort_values("จำนวนแถว")
-fig = px.bar(found, x="จำนวนแถว", y="ปัญหา", color="มิติคุณภาพ", orientation="h", text="จำนวนแถว")
-fig.update_layout(height=60 + 32 * len(found), yaxis_title="", legend_title="", **PLOT)
-fig.update_yaxes(categoryorder="total ascending")
-st.plotly_chart(fig, width="stretch")
-st.dataframe(q, hide_index=True, width="stretch")
+found = q[q["จำนวนเที่ยว"] > 0].sort_values("จำนวนเที่ยว", ascending=False)
+if len(found):
+  # แผนภูมิพาเรโต: เรียงจากมากไปน้อย + ร้อยละสะสม
+  found = found.assign(สะสม=found["จำนวนเที่ยว"].cumsum() / found["จำนวนเที่ยว"].sum() * 100)
+  st.markdown("#### แผนภูมิพาเรโตของปัญหาคุณภาพข้อมูล")
+  labels = found["ปัญหา"].str.replace(r"\s*\(.*\)", "", regex=True)
+  fig = go.Figure()
+  fig.add_bar(x=labels, y=found["จำนวนเที่ยว"], name="จำนวนเที่ยว", marker_color="#2563EB",
+              text=found["จำนวนเที่ยว"], customdata=found["มิติคุณภาพ"],
+              hovertemplate="%{x}<br>%{y:,} เที่ยว<br>มิติ: %{customdata}<extra></extra>")
+  fig.add_scatter(x=labels, y=found["สะสม"], yaxis="y2", mode="lines+markers", name="ร้อยละสะสม",
+                  line=dict(color="#DC2626"))
+  fig.update_layout(height=440, xaxis_title="", yaxis_title="จำนวนเที่ยว", legend=dict(orientation="h", y=1.12),
+                    yaxis2=dict(overlaying="y", side="right", range=[0, 105], title="ร้อยละสะสม", ticksuffix="%"),
+                    **PLOT)
+  st.plotly_chart(fig, width="stretch")
+st.dataframe(q.drop(columns="รหัส"), hide_index=True, width="stretch")
 
-st.markdown("#### ดูแถวที่มีปัญหา")
-code = st.selectbox("ประเภทปัญหา", found["รหัส"][::-1],
-                    format_func=lambda c: f"{im.FLAGS[c][0]} ({c})") if len(found) else None
+st.markdown("#### ดูเที่ยวที่มีปัญหา")
+code = st.selectbox("ประเภทปัญหา", found["รหัส"], format_func=lambda c: im.FLAGS[c][0]) if len(found) else None
 if code:
   rows = df[df["Flags"].str.contains(rf"\b{code}\b")]
-  st.dataframe(to_display(rows[["Work_Date", "Store", "Zone", "Username", "Position", "Booking", "Shift_In",
-                                "Distance_km", "Total_Payment", "EBilling_Status", "Remark", "Flags"]]),
-               hide_index=True, width="stretch")
+  cols = ["Trip_ID", "Trip_Date", "Driver_Code", "Branch_Code", "Zone", "Distance_km", "Planned_Distance_km",
+          "Revenue_THB", "EBilling_Status", "Distance_Source", "Source_Sheet", "Source_Row"]
+  st.dataframe(to_display(rows[[c for c in cols if c in rows]]), hide_index=True, width="stretch")
+
+log = db.load_quality_log()
+if len(log):
+  st.markdown("#### บันทึกการจัดการข้อมูลตอนแปลงเป็นรายเที่ยว")
+  st.caption("จากชีต Data_Quality_Log ของไฟล์ที่นำเข้า — ระบุแถวต้นฉบับ ปัญหา และวิธีจัดการ")
+  lg = log if month == "ทุกเดือน" else log[log["Year_Month"] == month]
+  s = lg.groupby(["Issue", "Action"]).size().reset_index(name="จำนวนรายการ").sort_values("จำนวนรายการ",
+                                                                                     ascending=False)
+  st.dataframe(s.rename(columns={"Issue": "ปัญหา", "Action": "การจัดการ"}), hide_index=True, width="stretch")

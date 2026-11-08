@@ -43,9 +43,9 @@ if admin:
   data_pages.insert(0, st.Page("pages/import_data.py", title="นำเข้าข้อมูล", icon="📥"))
 
 pg = st.navigation({
-    "ภาพรวม": [st.Page("pages/dashboard.py", title="ภาพรวม (Dashboard)", icon="📊", default=True)],
+    "ภาพรวม": [st.Page("pages/dashboard.py", title="ภาพรวม", icon="📊", default=True)],
     "วิเคราะห์": [
-        st.Page("pages/daily.py", title="ข้อมูลการปฏิบัติงานรายวัน", icon="📋"),
+        st.Page("pages/trips.py", title="ข้อมูลเที่ยววิ่ง", icon="📋"),
         st.Page("pages/vehicle.py", title="ยานพาหนะ", icon="🚚"),
         st.Page("pages/branch.py", title="วิเคราะห์ตามสาขา", icon="🏬"),
         st.Page("pages/cost.py", title="ต้นทุนและกำไร", icon="💰"),

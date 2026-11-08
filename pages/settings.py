@@ -4,69 +4,56 @@ import streamlit as st
 import auth
 import calculations as calc
 import database as db
-from common import baht, is_admin
+from common import baht, is_admin, th_month
 
 st.title("⚙️ ตั้งค่าพารามิเตอร์")
-st.caption("ทุกค่าที่ระบบใช้คำนวณ พร้อมแหล่งที่มาและสถานะ — ตารางนี้ต้องตรงกับตารางพารามิเตอร์ในรายงาน")
+st.caption("พารามิเตอร์ที่ระบบใช้คำนวณ พร้อมสถานะและแหล่งที่มา ตามตารางที่ 3.5 ของรายงาน")
 admin = is_admin()
-STATUSES = [db.REAL, db.REF, db.ASSUMED, db.PENDING]
 
-params = db.load_params()
-view = params[["grp", "label", "value", "unit", "status", "source"]].rename(columns={
-    "grp": "กลุ่ม", "label": "พารามิเตอร์", "value": "ค่า", "unit": "หน่วย", "status": "สถานะ", "source": "แหล่งที่มา"})
-st.dataframe(view.assign(ค่า=view["ค่า"].map(lambda v: "—" if pd.isna(v) else f"{v:,.4g}")),
-             hide_index=True, width="stretch")
+params = db.load_param_table()
+view = params[["label", "value", "unit", "status", "source"]].copy()
+view["value"] = view["value"].map(lambda v: "—" if pd.isna(v) else f"{v:,.4f}".rstrip("0").rstrip("."))
+fuel = db.load_fuel_prices()
+fuel_txt = " ".join(f"{th_month(m)[:-5]} {v:.2f}" for m, v in zip(fuel["year_month"], fuel["price"]))
+view.loc[len(view)] = ["ราคาน้ำมันดีเซลเฉลี่ยรายเดือน", fuel_txt, "บาท/ลิตร", "ผู้ใช้กรอก",
+                       db.BANGCHAK + " ผู้ใช้งานแก้ไขได้ในระบบ"]
+st.dataframe(view.rename(columns={"label": "พารามิเตอร์", "value": "ค่า", "unit": "หน่วย", "status": "สถานะ",
+                                  "source": "แหล่งที่มา"}), hide_index=True, width="stretch")
 
 p = db.param_values()
-dep = calc.depreciation_per_month(p)
-st.info(f"**ค่าเสื่อมราคาที่ระบบคำนวณ (วิธีเส้นตรง):** "
-        + (f"({baht(p['vehicle_price'])} − {baht(p.get('salvage_value') or 0)}) ÷ ({p['useful_life']:.0f} ปี × 12) "
-           f"= **{baht(dep)} ต่อคันต่อเดือน**" if dep is not None else "รอราคาทุนรถจากบริษัท"))
+st.info(f"**ค่าซ่อมบำรุงของกองรถที่ระบบคำนวณเอง:** {p['fleet_total']:.0f} คัน × ({p['dep_day']:,.2f} + "
+        f"{p['ins_year']:,.0f} ÷ 365) = **{baht(calc.fleet_day_cost(p), 2)} ต่อวัน** — ผู้ใช้งานไม่ต้องกรอกค่าเสื่อมราคาเอง")
 
 if admin:
-  with st.expander("✏️ แก้ไขพารามิเตอร์"):
-    row = st.selectbox("เลือกพารามิเตอร์", params.index, format_func=lambda i: params.loc[i, "label"])
-    r = params.loc[row]
+  with st.expander("✏️ แก้ไขพารามิเตอร์ (ผู้ดูแลระบบ)"):
+    i = st.selectbox("เลือกพารามิเตอร์", params.index, format_func=lambda i: params.loc[i, "label"])
+    r = params.loc[i]
     with st.form("param"):
-      v = st.number_input(f"ค่า ({r['unit']})", value=None if pd.isna(r["value"]) else float(r["value"]),
-                          min_value=0.0, format="%.4f", placeholder="ยังไม่มีค่า")
-      stt = st.selectbox("สถานะ", STATUSES, index=STATUSES.index(r["status"]) if r["status"] in STATUSES else 0)
+      v = st.number_input(f"ค่า ({r['unit']})", value=float(r["value"]), min_value=0.0, format="%.4f")
       src = st.text_area("แหล่งที่มา", r["source"])
       if st.form_submit_button("บันทึก", type="primary"):
-        db.update_param(r["key"], v, stt, src)
+        db.update_param(r["table"], r["key"], v, src)
         st.cache_data.clear()
         st.rerun()
 
-st.markdown("#### ⛽ ราคาน้ำมันดีเซลรายเดือน (ผู้ใช้กรอก)")
-fuel = db.load_fuel_prices()
-st.dataframe(fuel.rename(columns={"year_month": "เดือน", "price": "บาท/ลิตร", "source": "แหล่งที่มา"}),
-             hide_index=True, width="stretch")
+st.markdown("#### ⛽ ราคาน้ำมันดีเซลรายเดือน")
+st.dataframe(fuel.assign(year_month=fuel["year_month"].map(th_month)).rename(
+    columns={"year_month": "เดือน", "price": "บาท/ลิตร", "source": "แหล่งที่มา"}), hide_index=True, width="stretch")
 if admin:
   with st.form("fuel"):
     c = st.columns([1, 1, 3])
-    months = sorted(set(db.load_imports()["year_month"]) | set(fuel["year_month"])) or ["2026-06"]
-    ym = c[0].selectbox("เดือน", months)
+    months = sorted(set(db.load_imports()["year_month"]) | set(fuel["year_month"]))
+    ym = c[0].selectbox("เดือน", months, format_func=th_month)
     cur = fuel.set_index("year_month")["price"].get(ym)
     pr = c[1].number_input("บาท/ลิตร", min_value=0.0, value=float(cur) if cur is not None else None, format="%.2f")
-    src = c[2].text_input("แหล่งที่มา", fuel.set_index("year_month")["source"].get(ym, ""))
+    src = c[2].text_input("แหล่งที่มา", fuel.set_index("year_month")["source"].get(ym, db.BANGCHAK))
     if st.form_submit_button("บันทึกราคาน้ำมัน", type="primary") and pr:
       db.upsert_fuel_price(ym, pr, src)
       st.cache_data.clear()
       st.rerun()
-
-st.markdown("#### 🚚 จำนวนรถทั้งหมดของบริษัทรายเดือน")
-imp = db.load_imports()
-st.dataframe(imp[["year_month", "fleet_total"]].rename(columns={"year_month": "เดือน", "fleet_total": "รถทั้งหมด (คัน)"}),
-             hide_index=True)
-if admin and not imp.empty:
-  with st.form("fleet"):
-    c = st.columns(2)
-    ym = c[0].selectbox("เดือน", imp["year_month"])
-    n = c[1].number_input("รถทั้งหมด (คัน)", min_value=1, step=1, value=int(imp.set_index("year_month")["fleet_total"][ym]))
-    if st.form_submit_button("บันทึก"):
-      db.update_fleet_total(ym, n)
-      st.cache_data.clear()
-      st.rerun()
+  st.caption("เพิ่มเดือนใหม่: นำเข้าข้อมูลเดือนนั้นก่อน แล้วเดือนจะขึ้นในรายการให้เลือก")
+else:
+  st.caption("ผู้ใช้งานทั่วไป (Viewer) ดูได้อย่างเดียว — การแก้ไขพารามิเตอร์และราคาน้ำมันทำได้เฉพาะผู้ดูแลระบบ")
 
 st.markdown("---")
 st.markdown("#### 👤 บัญชีผู้ใช้")
