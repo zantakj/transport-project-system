@@ -103,6 +103,14 @@ def delete_month(ym):
     c.execute("DELETE FROM imports WHERE year_month=?", (ym,))
 
 
+def clear_all_data():
+  """ล้างข้อมูลเที่ยววิ่งทุกเดือน (เก็บผู้ใช้ พารามิเตอร์ และราคาน้ำมันไว้)"""
+  with get_connection() as c:
+    for table in ("trips", "other_billing", "quality_log"):
+      c.execute(f"DROP TABLE IF EXISTS {table}")
+    c.execute("DELETE FROM imports")
+
+
 def _read(table):
   with get_connection() as c:
     return pd.read_sql(f"SELECT * FROM {table}", c) if _exists(c, table) else pd.DataFrame()

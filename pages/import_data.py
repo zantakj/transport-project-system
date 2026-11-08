@@ -30,6 +30,15 @@ if not imports.empty:
     st.cache_data.clear()
     st.rerun()
 
+  with st.expander("🗑️ ล้างข้อมูลทั้งหมด"):
+    st.warning(f"ลบข้อมูลเที่ยววิ่งทั้ง {len(imports)} เดือนออกจากระบบ (ยังเก็บบัญชีผู้ใช้ พารามิเตอร์ และราคาน้ำมันไว้) "
+               "ย้อนกลับไม่ได้ ต้องนำเข้าไฟล์ใหม่")
+    sure = st.checkbox("ยืนยันว่าต้องการล้างข้อมูลทั้งหมด")
+    if st.button("ล้างข้อมูลทั้งหมด", type="primary", disabled=not sure):
+      db.clear_all_data()
+      st.cache_data.clear()
+      st.rerun()
+
 st.markdown("---")
 up = st.file_uploader("เลือกไฟล์ Excel (.xlsx)", type=["xlsx"])
 if up is None:
