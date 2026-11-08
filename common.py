@@ -118,3 +118,21 @@ def fuel_notice(k):
 
 def is_admin():
   return st.session_state.get("role") == "admin"
+
+
+@st.dialog("ที่มาของตัวเลข", width="large")
+def _explain(title, body):
+  st.markdown(f"### {title}")
+  st.markdown(body)
+
+
+def info(where, key, title, body, label="ⓘ ดูที่มาของตัวเลข"):
+  """ปุ่มเล็กที่เปิด pop-up อธิบายสูตรและที่มา"""
+  if where.button(label, key=f"info_{key}", type="tertiary"):
+    _explain(title, body)
+
+
+def kpi(col, key, title, value, sub, body, tone="primary"):
+  """การ์ดตัวเลข + ปุ่ม ⓘ ใต้การ์ด"""
+  card(col, title, value, sub, tone)
+  info(col, key, title, body)

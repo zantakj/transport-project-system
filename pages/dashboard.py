@@ -259,18 +259,13 @@ fig.add_scatter(x=m["Year_Month"].map(th_month), y=m["profit"], name="กำไ�
 fig.update_layout(barmode="group", height=360, yaxis_title="บาท", legend=dict(orientation="h", y=1.12), **PLOT)
 st.plotly_chart(fig, width="stretch")
 
-tb = m[["Year_Month", "trips", "km", "active_avg", "util", "revenue", "cost", "profit", "margin", "co2"]].copy()
-for col in ["trips", "revenue", "profit"]:
-  v = list(tb[col])
-  tb[f"{col}_chg"] = [None] + [calc.pct_change(a, b) for a, b in zip(v[1:], v[:-1])]
+tb = m[["Year_Month", "trips", "revenue", "cost", "profit", "margin"]].copy()
 tb["Year_Month"] = tb["Year_Month"].map(th_month)
-tb["co2"] = tb["co2"] / 1000
 st.dataframe(tb.rename(columns={
-    "Year_Month": "เดือน", "trips": "เที่ยว", "km": "ระยะทาง (กม.)", "active_avg": "รถที่วิ่ง/วัน",
-    "util": "อัตราการใช้รถ (%)", "revenue": "รายได้", "cost": "ต้นทุนรวม", "profit": "กำไรสุทธิ",
-    "margin": "อัตรากำไร (%)", "co2": "CO₂e (ตัน)", "trips_chg": "เที่ยว เปลี่ยนแปลง (%)",
-    "revenue_chg": "รายได้ เปลี่ยนแปลง (%)", "profit_chg": "กำไร เปลี่ยนแปลง (%)"}).style.format(precision=1, na_rep="—",
-                                                                                         thousands=","),
+    "Year_Month": "เดือน", "trips": "เที่ยว", "revenue": "รายได้ (บาท)", "cost": "ต้นทุนรวม (บาท)",
+    "profit": "กำไรสุทธิ (บาท)", "margin": "อัตรากำไร (%)"}).style.format(
+        {"รายได้ (บาท)": "{:,.0f}", "ต้นทุนรวม (บาท)": "{:,.0f}", "กำไรสุทธิ (บาท)": "{:,.0f}", "เที่ยว": "{:,}",
+         "อัตรากำไร (%)": "{:.1f}"}),
     hide_index=True, width="stretch")
-st.caption("อัตราการเปลี่ยนแปลง (%) = (ค่าเดือนนี้ − ค่าเดือนก่อน) ÷ ค่าเดือนก่อน × 100 · "
-           "ตารางนี้ใช้ข้อมูลทั้งบริษัท ไม่ขึ้นกับตัวกรองโซน/สาขา")
+st.caption("ตารางนี้ใช้ข้อมูลทั้งบริษัท ไม่ขึ้นกับตัวกรอง · อัตราการเปลี่ยนแปลงเทียบเดือนก่อนดูได้ที่การ์ดด้านบน "
+           "(เลือกเดือนที่แถบซ้าย)")

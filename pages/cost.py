@@ -4,81 +4,95 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import calculations as calc
-from common import CAT_COLORS, COLORS, PLOT, baht, card, fuel_notice, get_data, num, sidebar_filters, th_month
+from common import (CAT_COLORS, COLORS, PLOT, baht, fuel_notice, get_data, info, kpi, num, sidebar_filters,
+                    th_month)
 
 st.title("💰 ต้นทุนและกำไร")
 t, o, p = get_data()
 df, do, months, whole = sidebar_filters(t, o)
 k = calc.summarize(df, do, p, months, whole)
 fuel_notice(k)
+fuel = k["fuel_cost"] if pd.notna(k["fuel_cost"]) else 0
+day_cost = calc.fleet_day_cost(p)
+maint_how = (f"{p['fleet_total']:.0f} คัน × ({p['dep_day']:,.2f} + {p['ins_year']:,.0f} ÷ 365) × {k['maint_days']} วัน"
+             if whole else "ส่วนที่ปันส่วนให้เที่ยววิ่งของโซน/สาขาที่เลือก")
+DEDUCT = f"""
+| รายการ | วิธีคำนวณ | บาท |
+|---|---|---:|
+| รายได้ | ยอด E-Billing (ไม่รวม Helper) | {k['revenue']:,.2f} |
+| − ค่าจ้างพนักงานขับรถ | {p['wage_day']:,.0f} บาท/คน/วัน | {k['wage']:,.2f} |
+| − ค่าทำงานล่วงเวลา | {k['ot_hrs']:,.1f} ชม. × {p['ot_rate']:,.0f} บาท | {k['ot_cost']:,.2f} |
+| − ค่าน้ำมันเชื้อเพลิง | {k['fuel_l']:,.2f} ลิตร × ราคาดีเซลรายเดือน | {fuel:,.2f} |
+| − ค่าซ่อมบำรุง | {maint_how} | {k['maint']:,.2f} |
+| **= กำไรสุทธิ** | | **{k['profit']:,.2f}** |
+
+อัตรากำไรสุทธิ = {k['profit']:,.2f} ÷ {k['revenue']:,.2f} × 100 = **{k['margin']:,.1f}%**
+
+เป็นกำไรระดับการดำเนินงานขนส่ง ยังไม่หักค่าใช้จ่ายบริหารส่วนกลาง ดอกเบี้ย และภาษี
+"""
 
 c = st.columns(4)
-card(c[0], "รายได้ (ยอด E-Billing)", baht(k["revenue"]), f"{baht(k['rev_trip'])}/เที่ยว")
-card(c[1], "ต้นทุนรวม 3 หมวด", baht(k["cost"]), f"{baht(k['cost_trip'])}/เที่ยว · {num(k['cost_km'], 2)} บาท/กม.",
-     "warn")
-card(c[2], "กำไรสุทธิ", baht(k["profit"]), f"เฉลี่ย {baht(k['profit'] / k['trips'])}/เที่ยว",
-     "good" if k["profit"] >= 0 else "bad")
-card(c[3], "อัตรากำไรสุทธิ", num(k["margin"], 1, "%"), "กำไรสุทธิ ÷ รายได้ × 100",
-     "good" if k["profit"] >= 0 else "bad")
+kpi(c[0], "rev", "💵 รายได้", baht(k["revenue"]), f"{baht(k['rev_trip'])}/เที่ยว", f"""
+**รายได้ = ยอด E-Billing** ที่บริษัทเรียกเก็บจากลูกค้า (ไม่รวม Helper)
 
-st.markdown("#### กำไรสุทธิหักอะไรบ้าง")
-steps = [("รายได้ (ยอด E-Billing)", k["revenue"]), ("ค่าจ้างพนักงานขับรถ", -k["wage"]),
-         ("ค่าทำงานล่วงเวลา", -k["ot_cost"]), ("ค่าน้ำมันเชื้อเพลิง", -(k["fuel_cost"] or 0)),
-         ("ค่าซ่อมบำรุง (ค่าเสื่อม + ประกัน)", -k["maint"])]
-fig = go.Figure(go.Waterfall(
-    x=[s[0] for s in steps] + ["กำไรสุทธิ"], y=[s[1] for s in steps] + [k["profit"]],
-    measure=["absolute"] + ["relative"] * 4 + ["total"], text=[f"{abs(v) / 1e6:,.2f} ล้าน" for _, v in steps] +
-    [f"{k['profit'] / 1e6:,.2f} ล้าน"], textposition="outside",
-    increasing=dict(marker_color=COLORS["primary"]), decreasing=dict(marker_color=COLORS["bad"]),
-    totals=dict(marker_color=COLORS["good"] if k["profit"] >= 0 else COLORS["bad"])))
-fig.update_layout(height=400, yaxis_title="บาท", showlegend=False, **PLOT)
-st.plotly_chart(fig, width="stretch")
+= รายได้จากเที่ยววิ่ง {df['Revenue_THB'].sum():,.2f} + รายการที่ไม่ผูกกับเที่ยว {do['Revenue_THB'].sum():,.2f}
+= **{k['revenue']:,.2f} บาท**
 
-tbl = pd.DataFrame([
-    ["รายได้", "ยอด E-Billing (เที่ยววิ่ง + รายการที่ไม่ผูกกับเที่ยว ไม่รวม Helper)", k["revenue"]],
-    ["− ค่าจ้างพนักงานขับรถ", f"{p['wage_day']:,.0f} บาท/คน/วัน", -k["wage"]],
-    ["− ค่าทำงานล่วงเวลา", f"{num(k['ot_hrs'], 1)} ชม. ที่อนุมัติ × {p['ot_rate']:,.0f} บาท", -k["ot_cost"]],
-    ["− ค่าน้ำมันเชื้อเพลิง", f"{num(k['fuel_l'], 2)} ลิตร × ราคาดีเซลเฉลี่ยรายเดือน", -(k["fuel_cost"] or 0)],
-    ["− ค่าซ่อมบำรุง", (f"{p['fleet_total']:.0f} คัน × ({p['dep_day']:,.2f} + {p['ins_year']:,.0f} ÷ 365) × "
-                       f"{k['maint_days']} วัน" if whole else "ส่วนที่ปันส่วนให้เที่ยววิ่งที่เลือก"), -k["maint"]],
-    ["= กำไรสุทธิ", f"อัตรากำไรสุทธิ {num(k['margin'], 1, '%')}", k["profit"]],
-], columns=["รายการ", "วิธีคำนวณ", "บาท"])
-st.dataframe(tbl.style.format({"บาท": "{:,.2f}"}), hide_index=True, width="stretch")
-st.caption("กำไรสุทธิในระบบเป็นกำไรระดับการดำเนินงานขนส่ง ก่อนหักค่าใช้จ่ายบริหารส่วนกลาง ดอกเบี้ย และภาษีเงินได้นิติบุคคล "
-           "และไม่รวมรายได้และค่าจ้างของพนักงานประจำรถ (Helper)")
+รายได้ต่อเที่ยว = {k['revenue']:,.2f} ÷ {k['trips']:,} = {k['rev_trip']:,.2f} บาท
+""")
+kpi(c[1], "cost", "🧮 ต้นทุนรวม", baht(k["cost"]), f"{baht(k['cost_trip'])}/เที่ยว · {num(k['cost_km'], 2)} บาท/กม.",
+    f"""
+| หมวด | บาท | สัดส่วน |
+|---|---:|---:|
+| ค่าจ้าง + ค่าทำงานล่วงเวลา | {k['labor']:,.2f} | {k['labor'] / k['cost'] * 100:.1f}% |
+| ค่าน้ำมันเชื้อเพลิง | {fuel:,.2f} | {fuel / k['cost'] * 100:.1f}% |
+| ค่าซ่อมบำรุง (ค่าเสื่อม + ประกัน) | {k['maint']:,.2f} | {k['maint'] / k['cost'] * 100:.1f}% |
+| **รวม** | **{k['cost']:,.2f}** | 100% |
 
-left, right = st.columns(2)
+- ต้นทุนต่อเที่ยว = {k['cost']:,.2f} ÷ {k['trips']:,} = {k['cost_trip']:,.2f} บาท
+- ต้นทุนต่อกิโลเมตร = {k['cost']:,.2f} ÷ {k['km']:,.2f} = {k['cost_km']:,.2f} บาท
+""", "warn")
+kpi(c[2], "profit", "💰 กำไรสุทธิ", baht(k["profit"]), "รายได้ − ต้นทุน 3 หมวด", DEDUCT,
+    "good" if k["profit"] >= 0 else "bad")
+kpi(c[3], "margin", "📊 อัตรากำไรสุทธิ", num(k["margin"], 1, "%"), "กำไรสุทธิ ÷ รายได้", f"""
+**สูตร:** อัตรากำไรสุทธิ = กำไรสุทธิ ÷ รายได้ × 100
+
+= {k['profit']:,.2f} ÷ {k['revenue']:,.2f} × 100 = **{k['margin']:,.1f}%**
+
+บอกว่ารายได้ทุก 100 บาท เหลือเป็นกำไรกี่บาท
+""", "good" if k["profit"] >= 0 else "bad")
+
+left, right = st.columns([3, 2])
 with left:
-  st.markdown("#### โครงสร้างต้นทุน 3 หมวด")
-  cats = pd.DataFrame({"หมวด": list(CAT_COLORS), "บาท": [k["labor"], k["fuel_cost"] or 0, k["maint"]]})
-  fig = px.pie(cats, names="หมวด", values="บาท", hole=.5, color="หมวด", color_discrete_map=CAT_COLORS)
-  fig.update_layout(height=340, legend=dict(orientation="h", y=-0.1), **PLOT)
+  h = st.columns([3, 2])
+  h[0].markdown("#### กำไรสุทธิหักอะไรบ้าง")
+  info(h[1], "deduct", "กำไรสุทธิหักอะไรบ้าง", DEDUCT, "ⓘ ดูตัวเลขทีละบรรทัด")
+  steps = [("รายได้", k["revenue"]), ("ค่าจ้าง", -k["wage"]), ("ค่า OT", -k["ot_cost"]), ("ค่าน้ำมัน", -fuel),
+           ("ค่าซ่อมบำรุง", -k["maint"])]
+  fig = go.Figure(go.Waterfall(
+      x=[s[0] for s in steps] + ["กำไรสุทธิ"], y=[s[1] for s in steps] + [k["profit"]],
+      measure=["relative"] * 5 + ["total"],
+      text=[f"{abs(v) / 1e6:,.2f} ล." for _, v in steps] + [f"{k['profit'] / 1e6:,.2f} ล."], textposition="outside",
+      increasing=dict(marker_color=COLORS["primary"]), decreasing=dict(marker_color=COLORS["bad"]),
+      totals=dict(marker_color=COLORS["good"] if k["profit"] >= 0 else COLORS["bad"])))
+  fig.update_layout(height=380, yaxis_title="บาท", showlegend=False, **PLOT)
   st.plotly_chart(fig, width="stretch")
 with right:
-  st.markdown("#### ต้นทุนต่อเที่ยวและต่อกิโลเมตร แยกหมวด")
-  per = pd.DataFrame({"หมวด": list(CAT_COLORS),
-                      "บาท/เที่ยว": [k["labor"] / k["trips"], (k["fuel_cost"] or 0) / k["trips"], k["maint"] / k["trips"]],
-                      "บาท/กม.": [k["labor"] / k["km"], (k["fuel_cost"] or 0) / k["km"], k["maint"] / k["km"]]})
-  per.loc[len(per)] = ["รวม", k["cost_trip"], k["cost_km"]]
-  st.dataframe(per.style.format(precision=2, thousands=","), hide_index=True, width="stretch")
-  st.markdown(f"**ค่าซ่อมบำรุงของกองรถต่อวัน** = {p['fleet_total']:.0f} × ({p['dep_day']:,.2f} + "
-              f"{p['ins_year']:,.0f} ÷ 365) = **{baht(calc.fleet_day_cost(p), 2)}**")
+  st.markdown("#### สัดส่วนต้นทุน 3 หมวด")
+  cats = pd.DataFrame({"หมวด": list(CAT_COLORS), "บาท": [k["labor"], fuel, k["maint"]]})
+  fig = px.pie(cats, names="หมวด", values="บาท", hole=.5, color="หมวด", color_discrete_map=CAT_COLORS)
+  fig.update_layout(height=380, legend=dict(orientation="h", y=-0.15), **PLOT)
+  st.plotly_chart(fig, width="stretch")
 
-st.markdown("#### แนวโน้มรายเดือน (ทั้งบริษัท)")
-m = calc.monthly(t, o, p)
-mm = m.melt(id_vars="Year_Month", value_vars=["labor", "fuel_cost", "maint"], var_name="หมวด", value_name="บาท")
-mm["หมวด"] = mm["หมวด"].map(dict(zip(["labor", "fuel_cost", "maint"], CAT_COLORS)))
-mm["Year_Month"] = mm["Year_Month"].map(th_month)
-fig = px.bar(mm, x="Year_Month", y="บาท", color="หมวด", color_discrete_map=CAT_COLORS)
-fig.add_scatter(x=m["Year_Month"].map(th_month), y=m["revenue"], name="รายได้", mode="lines+markers",
-                line=dict(color=COLORS["primary"], width=3))
-fig.update_layout(height=360, xaxis_title="", legend=dict(orientation="h", y=1.15), **PLOT)
-st.plotly_chart(fig, width="stretch")
-mt = m[["Year_Month", "trips", "revenue", "wage", "ot_cost", "fuel_cost", "maint", "profit", "margin",
-        "cost_trip", "cost_km"]].copy()
-mt["Year_Month"] = mt["Year_Month"].map(th_month)
-st.dataframe(mt.rename(columns={
-    "Year_Month": "เดือน", "trips": "เที่ยว", "revenue": "รายได้", "wage": "ค่าจ้าง", "ot_cost": "ค่า OT",
-    "fuel_cost": "ค่าน้ำมัน", "maint": "ค่าซ่อมบำรุง", "profit": "กำไรสุทธิ", "margin": "อัตรากำไร (%)",
-    "cost_trip": "ต้นทุน/เที่ยว", "cost_km": "ต้นทุน/กม."}).style.format(precision=2, thousands=","),
-    hide_index=True, width="stretch")
+with st.expander("ดูต้นทุนและกำไรรายเดือน (ทั้งบริษัท)"):
+  m = calc.monthly(t, o, p)
+  mt = m[["Year_Month", "trips", "revenue", "wage", "ot_cost", "fuel_cost", "maint", "profit", "margin"]].copy()
+  mt["Year_Month"] = mt["Year_Month"].map(th_month)
+  st.dataframe(mt.rename(columns={
+      "Year_Month": "เดือน", "trips": "เที่ยว", "revenue": "รายได้", "wage": "ค่าจ้าง", "ot_cost": "ค่า OT",
+      "fuel_cost": "ค่าน้ำมัน", "maint": "ค่าซ่อมบำรุง", "profit": "กำไรสุทธิ", "margin": "อัตรากำไร (%)"})
+      .style.format({c_: "{:,.0f}" for c_ in ["เที่ยว", "รายได้", "ค่าจ้าง", "ค่า OT", "ค่าน้ำมัน", "ค่าซ่อมบำรุง",
+                                                "กำไรสุทธิ"]} | {"อัตรากำไร (%)": "{:.1f}"}), hide_index=True,
+      width="stretch")
+  st.caption(f"ค่าซ่อมบำรุงของกองรถต่อวัน = {p['fleet_total']:.0f} × ({p['dep_day']:,.2f} + {p['ins_year']:,.0f} ÷ 365) "
+             f"= {day_cost:,.2f} บาท คิดทุกวันในเดือน")
