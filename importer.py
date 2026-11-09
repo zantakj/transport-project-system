@@ -3,7 +3,7 @@ importer.py — อ่านไฟล์ Excel รายเที่ยว (ต�
 
 ไฟล์นำเข้า (ผลจากการแปลงข้อมูลรายวันของบริษัทเป็นรายเที่ยว ตามหัวข้อ 3.4.4)
   ชีต Trips            1 แถว = 1 เที่ยววิ่ง  (จำเป็น)
-  ชีต Other_Billing    รายการเรียกเก็บเงินที่ไม่ผูกกับเที่ยววิ่ง  (ถ้ามี — ตัดแถว Helper ออก)
+  ชีต Billing_No_Trip  ยอดบิลที่ไม่มีเที่ยววิ่ง (ชื่อเดิม Other_Billing)  (ถ้ามี — ตัดแถว Helper ออก)
   ชีต Data_Quality_Log บันทึกการจัดการข้อมูลตอนแปลง  (ถ้ามี — แสดงในหน้าตรวจคุณภาพข้อมูล)
 """
 import re
@@ -182,7 +182,7 @@ def read_trips(sheets, manual=None, sheet=None):
   t.attrs["dropped"] = {"MISSING_KEY": int(flags["MISSING_KEY"].sum()), "DUP_TRIP": int(flags["DUP_TRIP"].sum())}
 
   other = pd.DataFrame(columns=OTHER_COLS + ["Year_Month"])
-  oname = next((s for s in sheets if s.strip().lower() == "other_billing"), None)
+  oname = next((s for s in sheets if s.strip().lower() in ("billing_no_trip", "other_billing")), None)
   if oname is not None:
     o = sheets[oname]
     o = o[[c for c in OTHER_COLS + ["Month"] if c in o.columns]].copy()
