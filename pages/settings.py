@@ -83,3 +83,22 @@ if admin:
           st.success(f"เพิ่มผู้ใช้ {u} แล้ว")
         except ValueError as e:
           st.error(str(e))
+  with st.expander("ลบผู้ใช้"):
+    others = [u for u in auth.list_users()["username"] if u != st.session_state["user"]]
+    if not others:
+      st.caption("ยังไม่มีผู้ใช้อื่นให้ลบ")
+    else:
+      with st.form("deluser"):
+        target = st.selectbox("เลือกผู้ใช้ที่ต้องการลบ", others)
+        sure = st.checkbox("ยืนยันการลบ (ผู้ใช้นี้จะเข้าสู่ระบบไม่ได้อีก)")
+        if st.form_submit_button("ลบผู้ใช้", type="primary"):
+          if not sure:
+            st.error("กรุณาติ๊กยืนยันก่อนลบ")
+          else:
+            try:
+              auth.delete_user(target)
+              st.success(f"ลบผู้ใช้ {target} แล้ว")
+              st.rerun()
+            except ValueError as e:
+              st.error(str(e))
+      st.caption("ลบบัญชีของตัวเองไม่ได้ และต้องเหลือผู้ดูแลระบบอย่างน้อย 1 คน")
