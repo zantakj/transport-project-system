@@ -1,116 +1,187 @@
+"""
+database.py — ฐานข้อมูล SQLite ของระบบ (ไฟล์ transport_trips.db) ตามหัวข้อ 3.6.3 ของรายงาน
+
+ตารางหลัก 6 ตาราง
+  users        ผู้ใช้งาน รหัสผ่านที่แฮชด้วย bcrypt และสิทธิ์ (admin / viewer)
+  trips        ข้อมูลรายเที่ยวตามตารางที่ 3.3 (1 แถว = 1 เที่ยววิ่ง)
+  imports      ประวัติการนำเข้าไฟล์และเดือนของข้อมูล
+  params       พารามิเตอร์ตามตารางที่ 3.5 (ค่าจ้าง OT อัตราสิ้นเปลือง EF)
+  fuel_prices  ราคาน้ำมันดีเซลรายเดือนที่ผู้ใช้กรอก
+  fleet_master จำนวนรถทั้งหมดและอัตราค่าซ่อมบำรุงของกองรถ (ค่าเสื่อม + ประกัน)
+
+ตารางเสริม
+  other_billing รายการเรียกเก็บเงินที่ไม่ผูกกับเที่ยววิ่ง (ไม่รวม Helper) ต้องรวมกับ trips จึงได้รายได้ครบ
+  quality_log   บันทึกการจัดการข้อมูลจากขั้นตอนแปลงข้อมูล (ชีต Data_Quality_Log)
+"""
+import datetime as dt
+import os
 import sqlite3
 
 import pandas as pd
 
-DB_PATH = "transport.db"
+# ใช้ไฟล์ใหม่ เพื่อไม่ปนกับฐานข้อมูลของเว็บเวอร์ชันก่อน (transport.db / transport_real.db)
+DB_PATH = "transport_trips.db"
 
-# ชีตที่ระบบต้องการ และคอลัมน์ขั้นต่ำของแต่ละชีต
-REQUIRED_SHEETS = {
-    "Trips": [
-        "Trip_ID", "Trip_Date", "Vehicle_Code", "Vehicle_Type", "Route_Code",
-        "Distance_km", "Fuel_Liters", "Fuel_Price_THB_per_L", "Toll_THB",
-        "Driver_Allowance_THB", "Agreed_Price_THB", "Job_Status",
-    ],
-    "Vehicles": [
-        "Vehicle_Code", "Vehicle_Type", "Fuel_Type", "Status", "Purchase_Date",
-        "Purchase_Price_THB", "Useful_Life_Years", "Salvage_Value_THB",
-    ],
-    "Routes": ["Route_Code", "One_Way_km", "Round_Trip_km"],
-    "Cost_Parameters": [
-        "Vehicle_Type", "Driver_Salary_THB_per_Month",
-        "Insurance_Tax_THB_per_Year", "Tire_Count", "Tire_Price_THB",
-        "Tire_Life_km", "Oil_Change_Cost_THB", "Oil_Change_Interval_km",
-        "Repair_THB_per_km",
-    ],
-    "Emission_Factors": ["Fuel_Type", "kgCO2_per_L"],
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users(
+  username TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT);
+CREATE TABLE IF NOT EXISTS params(
+  key TEXT PRIMARY KEY, ord INTEGER, label TEXT, value REAL, unit TEXT, status TEXT, source TEXT);
+CREATE TABLE IF NOT EXISTS fleet_master(
+  key TEXT PRIMARY KEY, ord INTEGER, label TEXT, value REAL, unit TEXT, status TEXT, source TEXT);
+CREATE TABLE IF NOT EXISTS fuel_prices(
+  year_month TEXT PRIMARY KEY, price REAL, source TEXT);
+CREATE TABLE IF NOT EXISTS imports(
+  year_month TEXT PRIMARY KEY, file_name TEXT, trips INTEGER, other_rows INTEGER,
+  imported_at TEXT, imported_by TEXT);
+"""
+
+COMPANY, REF = "ข้อมูลจากบริษัท", "ค่าอ้างอิง"
+
+# ตารางที่ 3.5 — key: (ลำดับ, ชื่อ, ค่า, หน่วย, สถานะ, แหล่งที่มา)
+FLEET = {
+    "fleet_total": (1, "จำนวนรถทั้งหมด", 173, "คัน", COMPANY, "บริษัทกรณีศึกษา"),
+    "dep_day": (2, "ค่าเสื่อมราคา (รวมค่าซ่อมบำรุงอื่น)", 494.97, "บาท/คัน/วัน", COMPANY, "บริษัทกรณีศึกษา"),
+    "ins_year": (3, "ค่าเบี้ยประกันภัย", 5000, "บาท/คัน/ปี", COMPANY, "บริษัทกรณีศึกษา"),
 }
-
-# ชื่อคอลัมน์ 2 ภาษา (ใช้แสดงผลทุกหน้า)
-COLUMN_LABELS = {
-    "Trip_ID": "รหัสเที่ยว", "Trip_Date": "วันที่", "Year_Month": "เดือน",
-    "Customer_Code": "รหัสลูกค้า", "Vehicle_Code": "รหัสรถ",
-    "Vehicle_Type": "ประเภทรถ", "Route_Code": "รหัสเส้นทาง",
-    "Destination_Province_TH": "จังหวัดปลายทาง", "Delivery_Area": "ภาค",
-    "Distance_km": "ระยะทางไป-กลับ (กม.)", "One_Way_km": "ระยะเที่ยวเดียว (กม.)",
-    "Round_Trip_km": "ระยะไป-กลับ (กม.)", "Load_kg": "น้ำหนักสินค้า (กก.)",
-    "Departure_Time": "เวลาออก", "Scheduled_Delivery": "กำหนดส่ง",
-    "Actual_Delivery": "ส่งถึงจริง", "Completion_Time": "กลับถึงคลัง",
-    "Fuel_Liters": "น้ำมัน (ลิตร)", "Fuel_Price_THB_per_L": "ราคาน้ำมัน (บาท/ลิตร)",
-    "Toll_THB": "ค่าทางด่วน (บาท)", "Driver_Allowance_THB": "เบี้ยเลี้ยง (บาท)",
-    "Agreed_Price_THB": "ค่าขนส่ง (บาท)", "Job_Status": "สถานะงาน",
-    "Revenue_THB": "รายได้ (บาท)", "Fuel_Cost_THB": "ค่าน้ำมัน (บาท)",
-    "Tire_Cost_THB": "ค่ายาง (บาท)", "Oil_Cost_THB": "ค่าน้ำมันเครื่อง (บาท)",
-    "Repair_Cost_THB": "ค่าซ่อมบำรุง (บาท)", "Variable_Cost_THB": "ต้นทุนผันแปร (บาท)",
-    "Depreciation_THB": "ค่าเสื่อมราคา (บาท)", "Insurance_THB": "ประกัน/ภาษี (บาท)",
-    "Driver_Salary_THB": "เงินเดือนคนขับ (บาท)", "Idle_Cost_THB": "ต้นทุนรถว่าง/จอด (บาท)",
-    "Fixed_Cost_THB": "ต้นทุนคงที่ (บาท)", "Total_Cost_THB": "ต้นทุนรวม (บาท)",
-    "Profit_THB": "กำไรสุทธิ (บาท)", "Profit_Margin": "อัตรากำไร (%)",
-    "Cost_per_km": "ต้นทุน/กม. (บาท)", "Revenue_per_km": "รายได้/กม. (บาท)",
-    "CO2_kg": "CO₂ (กก.)", "km_per_L": "อัตราสิ้นเปลือง (กม./ลิตร)",
-    "Load_Factor": "อัตราการบรรทุก (%)", "On_Time": "ส่งตรงเวลา",
-    "Trips": "จำนวนเที่ยว", "Status": "สถานะรถ", "Fuel_Type": "ชนิดเชื้อเพลิง",
+PARAMS = {
+    "wage_day": (1, "ค่าจ้างพนักงานขับรถ", 500, "บาท/คน/วัน", COMPANY, "บริษัทกรณีศึกษา"),
+    "ot_rate": (2, "ค่าทำงานล่วงเวลา", 80, "บาท/ชั่วโมง", COMPANY, "บริษัทกรณีศึกษา"),
+    "km_per_l": (3, "อัตราการสิ้นเปลืองเชื้อเพลิง", 11, "กม./ลิตร", COMPANY,
+                 "บริษัทกรณีศึกษา สอดคล้องกับกรมการขนส่งทางบก (2560) และศรัณย์ ไชยางพานิช (2566)"),
+    "ef_diesel": (4, "ค่าการปล่อยก๊าซเรือนกระจกของดีเซล", 2.7406, "kgCO₂e/ลิตร", REF,
+                  "องค์การบริหารจัดการก๊าซเรือนกระจก (2565) และ IPCC (2006)"),
 }
-
-
-def label(col):
-  """คืนชื่อคอลัมน์แบบ 'ชื่อไทย (EN)'"""
-  th = COLUMN_LABELS.get(col)
-  return f"{th} ({col})" if th else col
-
-
-def to_display(df):
-  return df.rename(columns={c: label(c) for c in df.columns})
+FUEL_SOURCE = ("ราคาขายปลีกดีเซล B7 ของ ปตท. (PTT Station) เขตกรุงเทพฯ เฉลี่ยถ่วงน้ำหนักตามจำนวนวัน"
+               " ที่ใช้แต่ละราคาในเดือน (บริษัทเติมน้ำมันที่ ปตท.)")
+OLD_FUEL_SOURCE = "ราคาเฉลี่ยรายเดือนดีเซล B7 กรุงเทพฯ บริษัท บางจาก คอร์ปอเรชั่น จำกัด (มหาชน) (ม.ป.ป.)"
+DEFAULT_FUEL = {"2026-06": 39.25, "2026-07": 36.05, "2026-08": 37.59, "2026-09": 40.26, "2026-10": 42.84}
 
 
 def get_connection():
   return sqlite3.connect(DB_PATH)
 
 
-def validate_workbook(sheets):
-  """คืนรายการปัญหา (ชีต/คอลัมน์ที่ขาด) ถ้าไม่มีปัญหาคืน list ว่าง"""
-  problems = []
-  for sheet, cols in REQUIRED_SHEETS.items():
-    if sheet not in sheets:
-      problems.append(f"ไม่พบชีต '{sheet}'")
-      continue
-    missing = [c for c in cols if c not in sheets[sheet].columns]
-    if missing:
-      problems.append(f"ชีต '{sheet}' ขาดคอลัมน์: {', '.join(missing)}")
-  return problems
+def init_db():
+  with get_connection() as c:
+    c.executescript(SCHEMA)
+    for table, rows in (("params", PARAMS), ("fleet_master", FLEET)):
+      for k, v in rows.items():
+        c.execute(f"INSERT OR IGNORE INTO {table} VALUES (?,?,?,?,?,?,?)", (k, *v))
+    for ym, price in DEFAULT_FUEL.items():
+      c.execute("INSERT OR IGNORE INTO fuel_prices VALUES (?,?,?)", (ym, price, FUEL_SOURCE))
+    c.execute("UPDATE fuel_prices SET source=? WHERE source=?", (FUEL_SOURCE, OLD_FUEL_SOURCE))
 
 
-def save_workbook(sheets):
-  """บันทึกทุกชีตที่ระบบใช้ลงฐานข้อมูล คืน dict จำนวนแถวต่อชีต"""
-  conn = get_connection()
-  counts = {}
-  try:
-    for name in REQUIRED_SHEETS:
-      df = sheets[name].copy()
-      df.columns = df.columns.astype(str).str.strip()
-      df.to_sql(name, conn, if_exists="replace", index=False)
-      counts[name] = len(df)
-  finally:
-    conn.close()
-  return counts
+def _exists(c, name):
+  return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
-def load_table(name):
-  conn = get_connection()
-  try:
-    return pd.read_sql(f'SELECT * FROM "{name}"', conn)
-  except Exception:
-    return pd.DataFrame()
-  finally:
-    conn.close()
+# ---------------- ข้อมูลรายเที่ยว ----------------
+def save_months(trips, other, qlog, months, file_name, user):
+  """บันทึกข้อมูลตามเดือนที่เลือก (ถ้าเดือนนั้นเคยนำเข้าแล้ว จะแทนที่ของเดิมทั้งเดือน)"""
+  now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+  with get_connection() as c:
+    for ym in months:
+      for table in ("trips", "other_billing", "quality_log"):
+        if _exists(c, table):
+          c.execute(f"DELETE FROM {table} WHERE Year_Month=?", (ym,))
+      t = trips[trips["Year_Month"] == ym].copy()
+      t["Trip_Date"] = t["Trip_Date"].dt.strftime("%Y-%m-%d")
+      t.to_sql("trips", c, if_exists="append", index=False)
+      o = other[other["Year_Month"] == ym]
+      if len(o):
+        o.to_sql("other_billing", c, if_exists="append", index=False)
+      q = qlog[qlog["Year_Month"] == ym] if len(qlog) else qlog
+      if len(q):
+        q.to_sql("quality_log", c, if_exists="append", index=False)
+      c.execute("INSERT OR REPLACE INTO imports VALUES (?,?,?,?,?,?)", (ym, file_name, len(t), len(o), now, user))
 
 
-def load_all():
-  """โหลดทุกตาราง คืน None ถ้ายังนำเข้าข้อมูลไม่ครบ"""
-  tables = {name: load_table(name) for name in REQUIRED_SHEETS}
-  if any(t.empty for t in tables.values()):
-    return None
-  return tables
+def delete_month(ym):
+  with get_connection() as c:
+    for table in ("trips", "other_billing", "quality_log"):
+      if _exists(c, table):
+        c.execute(f"DELETE FROM {table} WHERE Year_Month=?", (ym,))
+    c.execute("DELETE FROM imports WHERE year_month=?", (ym,))
 
 
-def load_data_from_db():
-  return load_table("Trips")
+def clear_all_data():
+  """ล้างข้อมูลเที่ยววิ่งทุกเดือน (เก็บผู้ใช้ พารามิเตอร์ และราคาน้ำมันไว้)"""
+  with get_connection() as c:
+    for table in ("trips", "other_billing", "quality_log"):
+      c.execute(f"DROP TABLE IF EXISTS {table}")
+    c.execute("DELETE FROM imports")
+
+
+def reset_params():
+  """คืนพารามิเตอร์และราคาน้ำมันเป็นค่าเริ่มต้นตามรายงาน (ตารางที่ 3.5)"""
+  with get_connection() as c:
+    for table in ("params", "fleet_master", "fuel_prices"):
+      c.execute(f"DELETE FROM {table}")
+  init_db()
+
+
+def _read(table):
+  with get_connection() as c:
+    return pd.read_sql(f"SELECT * FROM {table}", c) if _exists(c, table) else pd.DataFrame()
+
+
+def load_trips():
+  t = _read("trips")
+  if len(t):
+    t["Trip_Date"] = pd.to_datetime(t["Trip_Date"])
+  return t
+
+
+def load_other():
+  return _read("other_billing")
+
+
+def load_quality_log():
+  return _read("quality_log")
+
+
+def load_imports():
+  with get_connection() as c:
+    return pd.read_sql("SELECT * FROM imports ORDER BY year_month", c)
+
+
+# ---------------- พารามิเตอร์ ----------------
+def load_param_table():
+  """ตารางที่ 3.5 ทั้งหมด (fleet_master + params) เรียงตามลำดับในรายงาน"""
+  with get_connection() as c:
+    f = pd.read_sql("SELECT * FROM fleet_master ORDER BY ord", c).assign(table="fleet_master")
+    p = pd.read_sql("SELECT * FROM params ORDER BY ord", c).assign(table="params")
+  return pd.concat([f.iloc[:1], p, f.iloc[1:]], ignore_index=True)
+
+
+def param_values():
+  t = load_param_table()
+  return {k: float(v) for k, v in zip(t["key"], t["value"]) if pd.notna(v)}
+
+
+def update_param(table, key, value, source):
+  assert table in ("params", "fleet_master")
+  with get_connection() as c:
+    c.execute(f"UPDATE {table} SET value=?, source=? WHERE key=?", (value, source, key))
+
+
+def load_fuel_prices():
+  with get_connection() as c:
+    return pd.read_sql("SELECT * FROM fuel_prices ORDER BY year_month", c)
+
+
+def fuel_dict():
+  f = load_fuel_prices()
+  return dict(zip(f["year_month"], f["price"]))
+
+
+def upsert_fuel_price(ym, price, source):
+  with get_connection() as c:
+    c.execute("INSERT OR REPLACE INTO fuel_prices VALUES (?,?,?)", (ym, price, source))
+
+
+def data_version():
+  """ค่าที่เปลี่ยนทุกครั้งที่ฐานข้อมูลถูกแก้ไข (ใช้ล้าง cache การคำนวณ)"""
+  return os.stat(DB_PATH).st_mtime_ns if os.path.exists(DB_PATH) else 0
