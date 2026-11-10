@@ -3,7 +3,6 @@ import streamlit as st
 from common import get_data, info, sidebar_filters, to_display
 
 st.title("📋 ข้อมูลเที่ยววิ่ง")
-st.caption("รายละเอียดรายเที่ยว (1 แถว = 1 เที่ยววิ่ง) แสดงรหัสแทนชื่อจริงของพนักงานขับรถและสาขา")
 t, o, p = get_data()
 df, do, months, whole = sidebar_filters(t, o)
 

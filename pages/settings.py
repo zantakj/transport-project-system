@@ -7,7 +7,7 @@ import database as db
 from common import baht, is_admin, th_month
 
 st.title("⚙️ ตั้งค่าพารามิเตอร์")
-st.caption("พารามิเตอร์ที่ระบบใช้คำนวณ พร้อมสถานะและแหล่งที่มา ตามตารางที่ 3.5 ของรายงาน")
+st.caption("ตามตารางที่ 3.5 ของรายงาน")
 admin = is_admin()
 
 params = db.load_param_table()
@@ -38,7 +38,7 @@ if admin:
 
 st.markdown("#### ⛽ ราคาน้ำมันดีเซลรายเดือน")
 fc = st.columns([3, 2])
-fc[0].caption("ราคาขายปลีกดีเซล B7 ของ ปตท. เขตกรุงเทพฯ เฉลี่ยรายเดือน (บริษัทเติมน้ำมันที่ ปตท.)")
+fc[0].caption("ดีเซล B7 ปตท. กรุงเทพฯ เฉลี่ยรายเดือน")
 fc[1].link_button("🔗 ดูราคาน้ำมัน ปตท.", db.FUEL_URL, width="stretch")
 st.dataframe(fuel[["year_month", "price"]].assign(year_month=fuel["year_month"].map(th_month)).rename(
     columns={"year_month": "เดือน", "price": "บาท/ลิตร"}), hide_index=True, width="stretch")
@@ -53,9 +53,8 @@ if admin:
       db.upsert_fuel_price(ym, pr, db.FUEL_SOURCE)
       st.cache_data.clear()
       st.rerun()
-  st.caption("เพิ่มเดือนใหม่: นำเข้าข้อมูลเดือนนั้นก่อน แล้วเดือนจะขึ้นในรายการให้เลือก")
 else:
-  st.caption("ผู้ใช้งานทั่วไป (Viewer) ดูได้อย่างเดียว — การแก้ไขพารามิเตอร์และราคาน้ำมันทำได้เฉพาะผู้ดูแลระบบ")
+  st.caption("ผู้ใช้ทั่วไปดูได้อย่างเดียว")
 
 st.markdown("---")
 st.markdown("#### 👤 บัญชีผู้ใช้")
@@ -101,4 +100,3 @@ if admin:
               st.rerun()
             except ValueError as e:
               st.error(str(e))
-      st.caption("ลบบัญชีของตัวเองไม่ได้ และต้องเหลือผู้ดูแลระบบอย่างน้อย 1 คน")
