@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import calculations as calc
+import database as db
 from common import COLORS, PLOT, baht, fuel_notice, get_data, kpi, num, sidebar_filters, th_month
 
 st.title("🌿 น้ำมันและคาร์บอน")
@@ -32,7 +33,7 @@ kpi(c[1], "fuelcost", "💸 ค่าน้ำมัน", baht(k["fuel_cost"]), 
 |---|---:|---:|---:|
 {rows}
 
-**รวม {fuel:,.2f} บาท** · ราคาดีเซล B7 ของ ปตท. เขตกรุงเทพฯ แก้ไขได้ที่หน้าตั้งค่าพารามิเตอร์
+**รวม {fuel:,.2f} บาท** · ราคาดีเซล B7 ของ ปตท. เขตกรุงเทพฯ ([🔗 ดูราคาน้ำมัน ปตท.]({db.FUEL_URL})) แก้ไขได้ที่หน้าตั้งค่าพารามิเตอร์
 """, "warn")
 
 st.markdown("##### ก๊าซเรือนกระจก (Carbon Footprint)")
