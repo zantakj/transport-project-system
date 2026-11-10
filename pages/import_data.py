@@ -112,7 +112,7 @@ if active.max() > fleet:
 
 q = im.quality_summary(trips)
 st.markdown("#### ผลตรวจคุณภาพข้อมูลเบื้องต้น (ตามตารางที่ 3.2)")
-st.dataframe(q[q["จำนวนเที่ยว"] > 0].drop(columns="รหัส"), hide_index=True, width="stretch")
+st.markdown(im.summary_markdown(q[q["จำนวนเที่ยว"] > 0]))
 with st.expander("ดูตัวอย่างข้อมูล (10 เที่ยวแรก)"):
   st.dataframe(to_display(trips.drop(columns=["Flags"]).head(10)), hide_index=True, width="stretch")
 
