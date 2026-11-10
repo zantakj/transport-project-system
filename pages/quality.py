@@ -20,16 +20,16 @@ c = st.columns([1, 1, 1])
 c[0].metric("จำนวนเที่ยวทั้งหมด", f"{len(df):,}")
 c[1].metric("เที่ยวที่ไม่พบปัญหา", f"{clean:.1f}%")
 info(c[2], "rules", "เกณฑ์ตรวจคุณภาพข้อมูล (ตารางที่ 3.2)", "\n".join(
-    ["| มิติ | สิ่งที่ตรวจ | การจัดการ |", "|---|---|---|"] +
+    ["| ด้านคุณภาพ | สิ่งที่ตรวจ | ระบบจัดการอย่างไร |", "|---|---|---|"] +
     [f"| {d} | {l} | {a} |" for l, d, a in im.FLAGS.values()]) +
-    "\n\nเที่ยวที่ไม่มีวันที่/รหัสคนขับ/รหัสสาขา และรหัสเที่ยวซ้ำ จะถูกคัดออกตั้งแต่ตอนนำเข้า",
+    "\n\nเที่ยวที่ไม่มีวันที่ รหัสพนักงานขับรถ หรือรหัสสาขา และเที่ยวที่รหัสซ้ำ ระบบจะคัดออกตั้งแต่ขั้นตอนนำเข้า ส่วนปัญหาอื่นทำเครื่องหมายไว้ ไม่ลบทิ้ง",
     "ⓘ ดูเกณฑ์ตรวจทั้งหมด")
 
 # รวมตามมิติคุณภาพ แล้วเรียงแบบพาเรโต
 dim = q.groupby("มิติคุณภาพ")["จำนวนเที่ยว"].sum().sort_values(ascending=False)
 dim = dim[dim > 0]
 if len(dim):
-  st.markdown("#### ปัญหาตามมิติคุณภาพ (พาเรโต)")
+  st.markdown("#### ปัญหาแยกตามด้านคุณภาพข้อมูล (พาเรโต)")
   cum = dim.cumsum() / dim.sum() * 100
   fig = go.Figure()
   fig.add_bar(x=dim.index, y=dim.values, text=dim.values, name="จำนวนเที่ยว", marker_color="#2563EB")
@@ -42,7 +42,7 @@ if len(dim):
 
 with st.expander("ดูรายละเอียดแยกตามประเภทปัญหา"):
   found = q[q["จำนวนเที่ยว"] > 0].sort_values("จำนวนเที่ยว", ascending=False)
-  st.dataframe(found.drop(columns="รหัส"), hide_index=True, width="stretch")
+  st.markdown(im.summary_markdown(found))
   code = st.selectbox("ดูเที่ยวที่มีปัญหา", found["รหัส"], format_func=lambda c: im.FLAGS[c][0]) if len(found) else None
   if code:
     rows = df[df["Flags"].str.contains(rf"\b{code}\b")]
