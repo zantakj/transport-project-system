@@ -38,12 +38,13 @@ with st.sidebar:
     st.session_state.clear()
     st.rerun()
 
-data_pages = [st.Page("pages/quality.py", title="ตรวจคุณภาพข้อมูล", icon="🧪")]
+has_data = not db.load_imports().empty
+nav = {}
 if admin:
-  data_pages.insert(0, st.Page("pages/import_data.py", title="นำเข้าข้อมูล", icon="📥"))
-
-pg = st.navigation({
-    "ภาพรวม": [st.Page("pages/dashboard.py", title="ภาพรวม", icon="📊", default=True)],
+  # ผู้ดูแลระบบเห็นปุ่มนำเข้าข้อมูลบนสุด ถ้ายังไม่มีข้อมูลจะเปิดหน้านี้เป็นหน้าแรก
+  nav["นำเข้าข้อมูล"] = [st.Page("pages/import_data.py", title="นำเข้าข้อมูล", icon="📥", default=not has_data)]
+nav.update({
+    "ภาพรวม": [st.Page("pages/dashboard.py", title="ภาพรวม", icon="📊", default=has_data or not admin)],
     "วิเคราะห์": [
         st.Page("pages/trips.py", title="ข้อมูลเที่ยววิ่ง", icon="📋"),
         st.Page("pages/vehicle.py", title="ยานพาหนะ", icon="🚚"),
@@ -51,7 +52,7 @@ pg = st.navigation({
         st.Page("pages/cost.py", title="ต้นทุนและกำไร", icon="💰"),
         st.Page("pages/carbon.py", title="น้ำมันและคาร์บอน", icon="🌿"),
     ],
-    "ข้อมูล": data_pages,
+    "ข้อมูล": [st.Page("pages/quality.py", title="ตรวจคุณภาพข้อมูล", icon="🧪")],
     "ตั้งค่า": [st.Page("pages/settings.py", title="ตั้งค่าพารามิเตอร์", icon="⚙️")],
 })
-pg.run()
+st.navigation(nav).run()
