@@ -5,7 +5,7 @@ import calculations as calc
 from common import COLORS, PLOT, get_data, kpi, num, sidebar_filters
 
 st.title("🚚 ยานพาหนะ")
-st.caption("ข้อมูลไม่มีทะเบียนรถ จึงนับรถที่วิ่งต่อวันจากรหัสพนักงานขับรถที่ไม่ซ้ำกันในแต่ละวัน")
+st.caption("นับรถจากรหัสพนักงานขับรถต่อวัน (ข้อมูลไม่มีทะเบียนรถ)")
 t, o, p = get_data()
 df, do, months, whole = sidebar_filters(t, o)
 d = calc.daily(df, p)
@@ -34,7 +34,7 @@ kpi(c[2], "util", "📈 อัตราการใช้รถ", num(util, 1, "
 ถ้าต่ำ แปลว่ามีรถจอดว่างมาก แต่ยังต้องจ่ายค่าเสื่อมและประกันของรถทุกคัน
 """, "good")
 if not whole:
-  st.info("กรองโซน/สาขาอยู่ — อัตราการใช้รถยังเทียบกับรถทั้งหมดของบริษัท จึงต่ำกว่าภาพรวม")
+  st.caption("กรองโซน/สาขาอยู่ · เทียบกับรถทั้งบริษัท")
 
 st.markdown("#### จำนวนรถที่วิ่งต่อวัน เทียบกับรถทั้งหมด")
 fig = go.Figure()

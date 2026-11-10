@@ -5,7 +5,7 @@ import calculations as calc
 from common import PLOT, get_data, info, sidebar_filters
 
 st.title("🏬 วิเคราะห์ตามสาขา")
-st.caption("ข้อมูลไม่มีเส้นทาง จึงเปรียบเทียบตามสาขาต้นทางและโซนแทน")
+st.caption("เทียบตามสาขาต้นทางและโซน (ข้อมูลไม่มีเส้นทาง)")
 t, o, p = get_data()
 df, do, months, whole = sidebar_filters(t, o)
 
