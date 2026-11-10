@@ -120,3 +120,4 @@ if st.button(f"🚀 นำเข้าข้อมูล {len(months)} เดื
   db.save_months(trips, other, qlog, months, up.name, st.session_state["user"])
   st.cache_data.clear()
   st.success("นำเข้าข้อมูลเดือน " + ", ".join(th_month(m) for m in months) + " สำเร็จ")
+  st.balloons()
