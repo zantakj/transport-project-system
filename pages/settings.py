@@ -16,13 +16,13 @@ view["value"] = view["value"].map(lambda v: "—" if pd.isna(v) else f"{v:,.4f}"
 fuel = db.load_fuel_prices()
 fuel_txt = " ".join(f"{th_month(m)[:-5]} {v:.2f}" for m, v in zip(fuel["year_month"], fuel["price"]))
 view.loc[len(view)] = ["ราคาน้ำมันดีเซลเฉลี่ยรายเดือน", fuel_txt, "บาท/ลิตร", "ผู้ใช้กรอก",
-                       "ราคาดีเซล B7 ของ ปตท. (ดูลิงก์ในหัวข้อราคาน้ำมันด้านล่าง) ผู้ใช้งานแก้ไขได้ในระบบ"]
+                       ""]
 st.dataframe(view.rename(columns={"label": "พารามิเตอร์", "value": "ค่า", "unit": "หน่วย", "status": "สถานะ",
                                   "source": "แหล่งที่มา"}), hide_index=True, width="stretch")
 
 p = db.param_values()
 st.info(f"**ค่าซ่อมบำรุงของกองรถที่ระบบคำนวณเอง:** {p['fleet_total']:.0f} คัน × ({p['dep_day']:,.2f} + "
-        f"{p['ins_year']:,.0f} ÷ 365) = **{baht(calc.fleet_day_cost(p), 2)} ต่อวัน** — ผู้ใช้งานไม่ต้องกรอกค่าเสื่อมราคาเอง")
+        f"{p['ins_year']:,.0f} ÷ 365) = **{baht(calc.fleet_day_cost(p), 2)} ต่อวัน**")
 
 if admin:
   with st.expander("✏️ แก้ไขพารามิเตอร์ (ผู้ดูแลระบบ)"):
