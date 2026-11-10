@@ -16,7 +16,7 @@ view["value"] = view["value"].map(lambda v: "—" if pd.isna(v) else f"{v:,.4f}"
 fuel = db.load_fuel_prices()
 fuel_txt = " ".join(f"{th_month(m)[:-5]} {v:.2f}" for m, v in zip(fuel["year_month"], fuel["price"]))
 view.loc[len(view)] = ["ราคาน้ำมันดีเซลเฉลี่ยรายเดือน", fuel_txt, "บาท/ลิตร", "ผู้ใช้กรอก",
-                       db.FUEL_SOURCE + " ผู้ใช้งานแก้ไขได้ในระบบ"]
+                       "ราคาดีเซล B7 ของ ปตท. (ดูลิงก์ในหัวข้อราคาน้ำมันด้านล่าง) ผู้ใช้งานแก้ไขได้ในระบบ"]
 st.dataframe(view.rename(columns={"label": "พารามิเตอร์", "value": "ค่า", "unit": "หน่วย", "status": "สถานะ",
                                   "source": "แหล่งที่มา"}), hide_index=True, width="stretch")
 
@@ -37,18 +37,20 @@ if admin:
         st.rerun()
 
 st.markdown("#### ⛽ ราคาน้ำมันดีเซลรายเดือน")
-st.dataframe(fuel.assign(year_month=fuel["year_month"].map(th_month)).rename(
-    columns={"year_month": "เดือน", "price": "บาท/ลิตร", "source": "แหล่งที่มา"}), hide_index=True, width="stretch")
+fc = st.columns([3, 2])
+fc[0].caption("ราคาขายปลีกดีเซล B7 ของ ปตท. เขตกรุงเทพฯ เฉลี่ยรายเดือน (บริษัทเติมน้ำมันที่ ปตท.)")
+fc[1].link_button("🔗 ดูราคาน้ำมัน ปตท.", db.FUEL_URL, width="stretch")
+st.dataframe(fuel[["year_month", "price"]].assign(year_month=fuel["year_month"].map(th_month)).rename(
+    columns={"year_month": "เดือน", "price": "บาท/ลิตร"}), hide_index=True, width="stretch")
 if admin:
   with st.form("fuel"):
-    c = st.columns([1, 1, 3])
+    c = st.columns([1, 1])
     months = sorted(set(db.load_imports()["year_month"]) | set(fuel["year_month"]))
     ym = c[0].selectbox("เดือน", months, format_func=th_month)
     cur = fuel.set_index("year_month")["price"].get(ym)
     pr = c[1].number_input("บาท/ลิตร", min_value=0.0, value=float(cur) if cur is not None else None, format="%.2f")
-    src = c[2].text_input("แหล่งที่มา", fuel.set_index("year_month")["source"].get(ym, db.FUEL_SOURCE))
     if st.form_submit_button("บันทึกราคาน้ำมัน", type="primary") and pr:
-      db.upsert_fuel_price(ym, pr, src)
+      db.upsert_fuel_price(ym, pr, db.FUEL_SOURCE)
       st.cache_data.clear()
       st.rerun()
   st.caption("เพิ่มเดือนใหม่: นำเข้าข้อมูลเดือนนั้นก่อน แล้วเดือนจะขึ้นในรายการให้เลือก")

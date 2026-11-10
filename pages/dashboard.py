@@ -2,6 +2,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import calculations as calc
+import database as db
 from common import COLORS, PLOT, baht, card, delta, fuel_notice, get_data, num, sidebar_filters, th_month
 
 st.title("📊 ภาพรวมการดำเนินงาน")
@@ -179,7 +180,7 @@ EXPLAIN = {
 
 **รวม {fuel_cost:,.2f} บาท**
 
-**ที่มาราคา:** ราคาขายปลีกดีเซล B7 ของ ปตท. เขตกรุงเทพฯ เฉลี่ยรายเดือน (บริษัทเติมน้ำมันที่ ปตท.) ผู้ดูแลระบบแก้ไขได้ที่หน้า **ตั้งค่าพารามิเตอร์**
+**ที่มาราคา:** ราคาขายปลีกดีเซล B7 ของ ปตท. เขตกรุงเทพฯ เฉลี่ยรายเดือน (บริษัทเติมน้ำมันที่ ปตท.) · [🔗 ดูราคาน้ำมัน ปตท.]({db.FUEL_URL}) · ผู้ดูแลระบบแก้ไขได้ที่หน้า **ตั้งค่าพารามิเตอร์**
 """),
     "co2": ("🌿 ก๊าซเรือนกระจก", f"""
 **ความหมาย:** ปริมาณก๊าซเรือนกระจกจากการเผาไหม้น้ำมันดีเซลของรถ (Carbon Footprint)
