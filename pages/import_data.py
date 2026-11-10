@@ -110,9 +110,8 @@ fleet = db.param_values().get("fleet_total", 173)
 if active.max() > fleet:
   st.warning(f"วันที่มีรถวิ่งมากที่สุด {active.max()} คัน มากกว่าจำนวนรถทั้งหมดที่ตั้งไว้ ({fleet:.0f} คัน)")
 
-q = im.quality_summary(trips)
-st.markdown("#### ผลตรวจคุณภาพข้อมูลเบื้องต้น (ตามตารางที่ 3.2)")
-st.markdown(im.summary_markdown(q[q["จำนวนเที่ยว"] > 0]))
+clean = (trips["Flags"].fillna("") == "").mean() * 100
+st.caption(f"ตรวจคุณภาพข้อมูลแล้ว ไม่พบปัญหา {clean:.1f}% · ดูรายละเอียดได้ที่หน้า 🧪 ตรวจคุณภาพข้อมูล หลังนำเข้า")
 with st.expander("ดูตัวอย่างข้อมูล (10 เที่ยวแรก)"):
   st.dataframe(to_display(trips.drop(columns=["Flags"]).head(10)), hide_index=True, width="stretch")
 
